@@ -1,0 +1,54 @@
+{
+  "comparisons": [
+    {
+      "after_db": 7.88550049146736,
+      "before_db": 7.743713038918263,
+      "hz": 1552.0,
+      "original_db": 12.027272148542817,
+      "span_s": [
+        0.8,
+        1.02
+      ]
+    },
+    {
+      "after_db": 7.5488034664890495,
+      "before_db": 3.8552792398804265,
+      "hz": 1539.0,
+      "original_db": 18.767809126308606,
+      "span_s": [
+        1.35,
+        1.57
+      ]
+    },
+    {
+      "after_db": 8.592463422176612,
+      "before_db": 8.591544623165033,
+      "hz": 1550.0,
+      "original_db": 17.012548849200137,
+      "span_s": [
+        2.0,
+        2.22
+      ]
+    }
+  ],
+  "new_tracks": 22,
+  "passed": true,
+  "seeds": [
+    {
+      "last_tail_identical": true,
+      "max_timing_delta_ms": 0.0,
+      "seed": 734
+    },
+    {
+      "last_tail_identical": true,
+      "max_timing_delta_ms": 0.0,
+      "seed": 927
+    },
+    {
+      "last_tail_identical": true,
+      "max_timing_delta_ms": 0.0,
+      "seed": 1229
+    }
+  ],
+  "source_unchanged": true
+}

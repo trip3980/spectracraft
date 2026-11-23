@@ -1,0 +1,94 @@
+{
+  "bottles": [
+    {
+      "checks": {
+        "44100": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.025761653980041415
+        }
+      },
+      "native_rate": 44100,
+      "source": "decentsampler-bottles-main/Bottles/Samples/L_RR1_60_C3.wav"
+    },
+    {
+      "checks": {
+        "44100": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": 0.0003238690460706285
+        }
+      },
+      "native_rate": 44100,
+      "source": "decentsampler-bottles-main/Bottles/Samples/L_RR1_67_G3.wav"
+    }
+  ],
+  "glass": [
+    {
+      "checks": {
+        "44100": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.00043058422258227533
+        },
+        "48000": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.0008616100338139374
+        }
+      },
+      "native_rate": 48000,
+      "source": "SIMPK_05_Glasharmonica/assets/wav/69_A4_00_00.wav"
+    },
+    {
+      "checks": {
+        "44100": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.00006003941372061906
+        },
+        "48000": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": 0.0029444669658089248
+        }
+      },
+      "native_rate": 48000,
+      "source": "SIMPK_05_Glasharmonica/assets/wav/72_C5_00_00.wav"
+    }
+  ],
+  "hurdy": [
+    {
+      "checks": {
+        "44100": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.002493854334631761
+        },
+        "96000": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.042831765059473906
+        }
+      },
+      "native_rate": 96000,
+      "source": "SIMPK_01_HurdyGurdy/assets/wav/67_G4_00_00.wav"
+    },
+    {
+      "checks": {
+        "44100": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": 0.007096893678633894
+        },
+        "96000": {
+          "attack_10pct_error_ms": 0.0,
+          "passed": true,
+          "rebuilt_power_change_at_reference_peak_db_relative_to_total": -0.030770048447456406
+        }
+      },
+      "native_rate": 96000,
+      "source": "SIMPK_01_HurdyGurdy/assets/wav/72_C5_00_00.wav"
+    }
+  ]
+}

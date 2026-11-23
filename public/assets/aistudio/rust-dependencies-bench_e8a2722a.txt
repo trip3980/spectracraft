@@ -1,0 +1,70 @@
+spectral-canvas-mono v0.1.0 (/workspace/scratch/7e8e50e9d14f/spectral-canvas-recovery/audit-preview5)
+├── claxon v0.4.3
+├── ebur128 v0.1.10
+│   ├── bitflags v1.3.2
+│   ├── dasp_frame v0.11.0
+│   │   └── dasp_sample v0.11.0
+│   ├── dasp_sample v0.11.0
+│   └── smallvec v1.16.6
+├── hound v3.5.1
+├── quick-xml v0.41.0
+│   └── memchr v2.8.3
+├── rustfft v6.4.1
+│   ├── num-complex v0.4.6
+│   │   └── num-traits v0.2.19
+│   │       [build-dependencies]
+│   │       └── autocfg v1.5.1
+│   ├── num-integer v0.1.47
+│   │   └── num-traits v0.2.19 (*)
+│   ├── num-traits v0.2.19 (*)
+│   ├── primal-check v0.3.4
+│   │   └── num-integer v0.1.47 (*)
+│   ├── strength_reduce v0.2.4
+│   └── transpose v0.2.3
+│       ├── num-integer v0.1.47 (*)
+│       └── strength_reduce v0.2.4
+├── serde v1.0.228
+│   ├── serde_core v1.0.228
+│   └── serde_derive v1.0.228 (proc-macro)
+│       ├── proc-macro2 v1.0.107
+│       │   └── unicode-ident v1.0.27
+│       ├── quote v1.0.47
+│       │   └── proc-macro2 v1.0.107 (*)
+│       └── syn v2.0.119
+│           ├── proc-macro2 v1.0.107 (*)
+│           ├── quote v1.0.47 (*)
+│           └── unicode-ident v1.0.27
+├── serde_json v1.0.150
+│   ├── itoa v1.0.19
+│   ├── memchr v2.8.3
+│   ├── serde_core v1.0.228
+│   └── zmij v1.0.23
+└── zip v2.4.2
+    ├── crc32fast v1.5.5
+    │   └── cfg-if v1.0.5
+    ├── displaydoc v0.2.7 (proc-macro)
+    │   ├── proc-macro2 v1.0.107 (*)
+    │   ├── quote v1.0.47 (*)
+    │   └── syn v3.0.10
+    │       ├── proc-macro2 v1.0.107 (*)
+    │       ├── quote v1.0.47 (*)
+    │       └── unicode-ident v1.0.27
+    ├── flate2 v1.1.11
+    │   ├── crc32fast v1.5.5 (*)
+    │   └── miniz_oxide v0.9.1
+    │       ├── adler2 v2.0.1
+    │       └── simd-adler32 v0.3.10
+    ├── indexmap v2.14.2
+    │   ├── equivalent v1.0.3
+    │   └── hashbrown v0.17.1
+    ├── memchr v2.8.3
+    ├── thiserror v2.0.21
+    │   └── thiserror-impl v2.0.21 (proc-macro)
+    │       ├── proc-macro2 v1.0.107 (*)
+    │       ├── quote v1.0.47 (*)
+    │       └── syn v3.0.10 (*)
+    └── zopfli v0.8.4
+        ├── bumpalo v3.20.4
+        ├── crc32fast v1.5.5 (*)
+        ├── log v0.4.35
+        └── simd-adler32 v0.3.10

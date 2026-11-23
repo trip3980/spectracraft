@@ -1,0 +1,797 @@
+SpectraCraft — Canonical Rust Implementation Specification
+Project specification and contract for the native Rust desktop application
+Contents
+01. Project Contract	1
+02. Non-Negotiable Invariants	2
+03. Data Ownership, Timeline, and Evidence	4
+04. Stage 1 — Dry Regeneration	6
+05. Stage 2 — Surgical Region Editing	8
+06. Stage 3 — Optional Microphone	11
+07. Stage 4 — Optional Space / Room	12
+08. Stage 5 — Optional Plugin Slot	14
+09. Render Dependencies and Cache Invalidation	15
+10. Source, Microphone, Material, and Profile Data	16
+11. Acoustic Mathematics	18
+12. Native Workspace and Display Boundaries	19
+13. Inspector Controls and Shared 3D Scene	21
+14. Playback, Preview, Export, and Review	23
+15. Error Handling and Real-time Safety	25
+16. Required Verification	26
+17. Implementation Completion and Handoff	28
+
+01. Project Contract
+SpectraCraft MUST implement this specification within the existing native Rust desktop application and preserve working engine, playback, editing, and export behavior.
+The repository MUST retain this specification as SPECTRACRAFT_SPEC.md and reference the specification from project instructions used for future changes.
+Product-owned crate names, binaries, modules, documentation, window titles, commands, and interface labels MUST consistently identify SpectraCraft.
+SpectraCraft-owned application code, audio processing, analysis, synthesis, acoustic calculations, plotting, CLI tools, fixtures, and verification tools MUST remain Rust.
+The application MUST remain a native desktop workstation.
+Python, Python wrappers, browser substitutes, and promotional dashboards MUST NOT become application, engine, or verification dependencies.
+Implementation MUST begin with a runnable workflow covering import, shape extraction, dry regeneration, original/dry comparison, and basic region tools.
+Optional capture and plugin stages MUST build on that functioning workflow.
+02. Non-Negotiable Invariants
+Single-source invariant
+•	One work unit contains one imported instrument performance, voice, or stem.
+•	Supported chords, repeated attacks, simultaneous partials, and overlapping ringing remain valid within one source.
+•	Additional performances require separate work units.
+Performance-reference invariant
+•	The extracted performance shape remains the immutable evidence reference.
+•	Explicit correction requests operate on derived rendering instructions.
+•	Source models, catalog ranges, and profile matches MUST NOT replace evidence.
+Fresh-signal invariant
+•	Regenerated audio consists exclusively of newly synthesized samples.
+•	Original PCM, source phase, sampled attacks, copied residual audio, and original waveform fragments MUST NOT enter any processing-stage output.
+•	Original playback and comparison remain isolated monitoring operations.
+Dry-first invariant
+•	Every processed output depends on an available regenerated dry take.
+•	Microphone, room, material, and plugin settings MUST NOT participate in foundational dry synthesis.
+Surgical-edit invariant
+•	Every localized correction targets the regenerated dry take before capture.
+•	Original audio and downstream captured audio are never surgical-edit targets.
+Independent-bypass invariant
+•	Every stage has an explicit bypass contract.
+•	Bypass preserves settings and never substitutes original audio.
+Display-isolation invariant
+•	Display commands MUST NOT alter audio, performance evidence, effective DSP settings, playback position, or audio-render fingerprints.
+Uncertainty invariant
+•	Unsupported or ambiguous evidence remains explicitly unresolved.
+•	Numerical scores, source expectations, and plausible synthesis MUST NOT convert uncertainty into claims about musical events.
+State invariant
+•	Every render uses explicit inputs, parameter snapshots, and dependency revisions.
+•	No stage may retrieve hidden audio inputs or inherit undocumented DSP state.
+Scope
+•	SpectraCraft reconstructs a performance for subsequent audio work.
+•	Full-mix separation, universal transcription, historical gear identification, forensic recovery, and DAW replacement are outside this contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    DryRegeneration,
+    SurgicalRegionEditing,
+    Microphone,
+    SpaceRoom,
+    PluginSlot,
+}
+ 
+pub const PIPELINE_ORDER: [Stage; 5] = [
+    Stage::DryRegeneration,
+    Stage::SurgicalRegionEditing,
+    Stage::Microphone,
+    Stage::SpaceRoom,
+    Stage::PluginSlot,
+];
+03. Data Ownership, Timeline, and Evidence
+OriginalAsset
+•	Store the original file identity, full checksum, actual sample rate, channel layout, sample count, and duration.
+•	Preserve original file bytes.
+•	Record decoding, resampling, or channel conversion as separately identified derivatives with their own metadata and checksums.
+•	Report unsupported formats or channel layouts explicitly.
+•	Never silently downmix, truncate, pad, or relabel a derivative as original.
+ReferenceShape
+•	Store serializable performance evidence sufficient for source-free synthesis:
+o	note and gesture onsets and offsets
+o	pitch and partial trajectories, including bends, slides, and vibrato
+o	amplitude envelopes, dynamics, accents, and repeated excitation
+o	spectral envelopes, harmonic distributions, and supported formant traits
+o	supported noise-texture parameters
+o	attack, decay, sustain, damping, and release behavior
+o	overlapping ringing and energy carried between gestures
+o	evidence classifications, competing hypotheses, and unresolved spans.
+ReferenceShape ownership
+•	Keep measured evidence separate from editable rendering instructions.
+•	Changing source voicing or downstream settings MUST preserve the reference shape hash.
+•	Explicit reanalysis creates a new reference-shape revision.
+Evidence classifications
+•	Preserve supported evidence, uncertain evidence, out-of-target evidence, and silence as distinct states.
+•	Preserve evidence strength separately so weak coherent evidence remains distinguishable from strongly supported evidence.
+•	Retain competing pitch hypotheses and documented confidence information.
+Evidence interpretation
+•	A click alone does not establish a pick attack.
+•	Unexplained energy does not establish noise or another instrument.
+•	Pitch fluctuation does not establish intentional expression or recording damage without supporting evidence.
+•	Published instrument ranges cannot invalidate supported out-of-range cues.
+Analysis
+•	Use time-frequency analysis at appropriate temporal and spectral resolutions.
+•	Follow coherent ridges, harmonic relationships, diagonal pitch movement, quiet attacks, amplitude evolution, and ringing across gesture boundaries.
+•	Separate suspected recording artifacts from supported performance details.
+•	Preserve ambiguity around bleed, shimmer, watery texture, crackle, separation smear, and wow/flutter.
+CuePacket
+•	Save editable rendering instructions, reference-shape identity, uncertainty, source-model configuration, deterministic seeds, and synthesis parameters.
+•	Exclude original PCM, original phase, copied residuals, and source-file access capabilities from the synthesis-facing packet.
+GeneratedAudio
+•	Use immutable audio buffers with sample rate, channel layout, frame count, logical timeline origin, content hash, render revision, and provenance.
+•	Publish a new buffer when audio changes.
+•	Never mutate an original asset or an active playback buffer in place.
+Timeline
+•	Represent committed audio boundaries using integer sample frames.
+•	Preserve the imported performance timeline throughout the pipeline.
+•	Record physical propagation delay separately from algorithmic latency.
+•	Record any output tail explicitly.
+•	At an unchanged sample rate, foundational dry output MUST cover the complete reference frame count rather than an implicitly selected excerpt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvidenceStatus {
+    Supported,
+    Uncertain,
+    OutOfTarget,
+    Silence,
+}
+ 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SampleRange {
+    pub start_frame: u64,
+    pub end_frame_exclusive: u64,
+}
+04. Stage 1 — Dry Regeneration
+Analysis inputs
+•	OriginalAsset plus explicitly selected analysis settings.
+Synthesis inputs
+•	ReferenceShape, derived cue instructions, source-character settings, implemented source-model parameters, render format, and deterministic seed.
+Output
+•	A complete, newly synthesized, completely dry take.
+•	A saved cue packet.
+•	A render record identifying effective settings and unresolved evidence.
+•	An immutable cached dry buffer.
+Dry definition
+•	Dry synthesis contains intrinsic source behavior such as string ringing, body resonance, supported breath texture, and supported attack character.
+•	Dry synthesis contains no virtual microphone coloration, propagation delay, room reflections, material absorption, spatial processing, or plugin effects.
+Synthesis structure
+•	Use a DDSP-style control structure with source-appropriate harmonic, modal, and freshly generated noise components.
+•	A procedural implementation is sufficient.
+•	Training on external music catalogs is not required.
+Harmonic and modal synthesis
+•	Drive generated oscillator or modal frequencies from supported trajectories.
+•	Generate phase internally.
+•	Preserve continuous generated phase through supported slides and bends.
+•	Represent repeated excitation without unnecessarily resetting ringing state.
+•	Preserve supported overlap rather than forcing every source into one monophonic fundamental track.
+Noise synthesis
+•	Generate supported breath, bow, friction, or related texture from compact parameters and reproducible noise generation.
+•	Never copy the source residual.
+•	Never fill unresolved structure with generic noise.
+Unresolved synthesis
+•	Render supported components without asserting unsupported fundamental, articulation, or instrument identities.
+•	Leave unresolved components explicitly identified in the render record.
+•	Do not create new attacks or notes solely to bridge uncertain spans.
+Source-character guidance
+•	Use the selected source model to parameterize harmonic weighting, formants, body response, texture, and characteristic decay.
+•	Preserve evidence-supported timing, pitch, phrasing, dynamics, and overlap.
+•	Follow supported unusual behavior even when a generic model predicts a different response.
+Character controls
+•	Support keeping the observed character or applying a selected Natural, Analog, or Digital character target.
+•	Retain supported source-character variants from the reference catalog.
+•	Apply bounded, visible guidance strengths.
+•	Clearing guidance returns to shape-driven synthesis.
+•	Character selection MUST NOT silently enable microphone, room, or plugins.
+•	Analog character MUST NOT be represented by automatically adding hum.
+Rough character estimation
+•	Compare measurable noise-floor behavior, spectral balance, distortion, apparent room energy, and related traits with loose reference profiles.
+•	Present Natural, Analog, Digital, or Unclear with uncertainty information.
+•	Treat source-family, microphone-style, and room-style matches as suggestions.
+•	Require an explicit accepted target before a suggestion changes processing.
+•	Never present profile similarity as identification of the original setup.
+Global straightening
+•	Keep light straightening disabled until explicitly requested.
+•	Apply requested mild pitch-wander or consistency correction only to derived dry-synthesis instructions.
+•	Preserve supported bends, slides, vibrato, unusual articulation, and timing.
+•	Do not require transcription, MIDI conversion, quantization, or ideal notation.
+Cache identity
+•	Include reference-shape revision, effective dry settings, source-model data, renderer version, sample format, and deterministic seed.
+Bypass
+•	Return an existing valid generated dry cache for the active reference and effective dry configuration.
+•	With no valid generated dry cache, report DryUnavailable and block dependent rendering or export.
+•	While regeneration is bypassed, changed dry controls remain visibly pending.
+•	Cached-output metadata MUST continue to identify the settings that actually produced the audible buffer.
+•	Reenabling regeneration applies pending settings and creates a new revision.
+05. Stage 2 — Surgical Region Editing
+Inputs
+•	The current Stage 1 dry buffer.
+•	ReferenceShape and corresponding derived synthesis instructions.
+•	Region definitions, explicit fix requests, and accepted edit history.
+Output
+•	The current edited dry take.
+•	Versioned accepted edit records and localized candidate metadata.
+•	The unchanged Stage 1 buffer remains available.
+Region tools
+•	Provide rectangular marquee selection on dry spectral views.
+•	Provide draggable in/out ranges on dry waveform and spectral views.
+•	Support moving rectangles and resizing every rectangle edge and corner.
+•	Support multiple independent regions.
+•	Store time-range or time-frequency bounds relative to the dry timeline.
+•	Optional lasso selection MUST follow the same bounded-edit contract.
+Selection ownership
+•	Enable correction tools only on the dry take.
+•	Display the original beside the dry take for reference.
+•	Creating, moving, resizing, annotating, or deleting a selection changes selection metadata only.
+•	Selection manipulation MUST NOT commit audio.
+Fix requests
+•	Allow a short note and a light straighten, smooth, reduce-noise, or stabilize request for the active region.
+•	Resolve a free description only to supported bounded operations.
+•	Preserve an unsupported description as a visible unresolved request.
+•	Never execute undocumented processing from an ambiguous note.
+Candidate generation
+•	Reprocess only selected derived shape components through the dry synthesizer.
+•	Read surrounding context when necessary for continuity.
+•	Keep surrounding audio and unselected shape components unchanged.
+•	Bind each candidate to the exact dry input hash, region revision, committed bounds, fix request, synthesis configuration, and uncertainty state.
+Frequency scope
+•	Limit directly modified components or coefficients to the selected frequency mask.
+•	Never convert a frequency-limited request into an undisclosed full-band edit.
+•	Reject an operation unchanged when the requested operation cannot honor the selected scope.
+•	Do not claim perfect spectral isolation from a finite temporal edit.
+Temporal scope
+•	Commit changes only inside [start_frame, end_frame_exclusive).
+•	Place short boundary crossfades entirely inside the selected time interval.
+•	Bound each crossfade by the available region length.
+•	Blend newly synthesized regional audio with generated dry audio only.
+•	Preserve samples outside the committed time interval bit-for-bit.
+•	Never normalize or reprocess the complete dry take to accommodate a patch.
+Acceptance
+•	Require explicit Apply or equivalent acceptance before replacing committed dry audio.
+•	Reject stale candidates.
+•	Store accepted edit bounds independently from mutable selection geometry.
+•	Moving or deleting a selection after acceptance MUST NOT relocate or undo previously accepted audio.
+Overlapping edits
+•	Apply accepted edits against the current committed dry revision.
+•	Record acceptance order and parent/output revisions.
+•	Never overwrite a newer accepted edit with a candidate from an older parent.
+Undo/redo
+•	Maintain independent history for selection changes and accepted resynthesis.
+•	Restore validated dry revisions when undoing or redoing accepted audio edits.
+•	Preserve other region definitions when one region changes.
+Upstream regeneration
+•	Invalidate candidate audio and accepted patch buffers when Stage 1 changes.
+•	Preserve region definitions and fix requests.
+•	Require reprocessing against the new dry revision before patches become current.
+•	Never splice patch audio from a different dry revision into the new take.
+Region preview
+•	Support region solo, optional looping, and same-bounds before/candidate A/B.
+•	Debounce candidate regeneration while an active requested region is moved or resized.
+•	Replace only the relevant preview buffer.
+•	Preserve full-take transport position and unrelated playback.
+•	Use the dry preview path by default.
+•	Apply microphone or room processing to region audition only when explicitly enabled for audition.
+•	Keep every preview result separate from committed dry audio.
+Downstream scheduling
+•	Selection changes and unaccepted candidates leave committed downstream results valid.
+•	Accepted dry changes mark downstream results stale.
+•	Defer downstream rerendering during dry editing until the user leaves dry editing or explicitly refreshes later stages.
+•	Prevent stale downstream output from being exported as current.
+Bypass
+•	Return Stage 1 audio unchanged.
+•	Preserve region definitions, requests, and accepted edit history.
+•	Reenabling surgical processing requires edits valid for the current base.
+•	An empty edit set behaves as identity processing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LocalFixKind {
+    Straighten,
+    Smooth,
+    ReduceNoise,
+    Stabilize,
+}
+06. Stage 3 — Optional Microphone
+Default
+•	Bypassed.
+Inputs
+•	The current Stage 2 dry output.
+•	Explicit source and receiver geometry.
+•	Selected microphone profile, pattern, aim, and implemented response.
+•	Explicit source-radiation parameters when an implemented model exists.
+Output
+•	A direct microphone capture buffer.
+•	An explicit capture context for Stage 4.
+Enabled behavior
+•	Apply the selected implemented microphone response.
+•	Apply direct-path distance, propagation delay, and directional pickup.
+•	Preserve the underlying dry performance and reference shape.
+•	Support existing independent microphone slots for the same single source.
+•	Preserve explicit channel or slot routing without an undocumented mic sum.
+Capture context
+•	Carry the exact immutable generated dry excitation consumed by this stage.
+•	Carry the direct processed buffer.
+•	Carry source/receiver poses and microphone-transfer snapshots.
+•	Carry direct-path delay, gain, filtering, timeline, and routing information.
+•	Record which direct-path operations have already been applied.
+Context ownership
+•	Stage 4 MUST receive the capture context through the Stage 3 output.
+•	Stage 4 MUST NOT obtain another dry buffer through global state.
+•	The capture context MUST contain no original PCM or source-file capability.
+Bypass
+•	Return the Stage 2 audible buffer unchanged.
+•	Expose a neutral pickup in the capture context.
+•	Retain receiver positions for an independently enabled room stage.
+•	Disable microphone coloration, microphone directional weighting, and microphone-specific response behavior.
+•	Stored microphone model or pattern changes cannot affect room-only audio.
+Parameter ownership
+•	Microphone-specific controls belong to this stage.
+•	Source and receiver positions belong to shared physical scene state.
+•	A shared placement change may affect an enabled room stage even when the microphone stage is bypassed.
+07. Stage 4 — Optional Space / Room
+Default
+•	Bypassed, with a configured 10 × 10 × 10 ft padded room.
+Inputs
+•	The complete Stage 3 output and capture context.
+•	Room topology, physical dimensions, independent surface materials, source/receiver geometry, and acoustic model parameters.
+Output
+•	A spatially processed capture buffer with explicit propagation and tail metadata.
+Enabled behavior
+•	Compute direct and reflected paths from actual geometry.
+•	Combine room dimensions, materials, source placement, receiver placement, source radiation, and effective pickup weighting.
+•	Produce spatial depth in the rendered audio before export.
+Direct path
+•	With microphone processing enabled, retain the Stage 3 direct result once.
+•	With microphone processing bypassed, compute the room's direct propagation using the generated excitation and neutral receiver.
+Reflected paths
+•	Build each reflected contribution from the generated excitation carried in the Stage 3 context.
+•	Apply full path delay, distance attenuation, surface reflection factors, source-radiation weighting, and effective microphone pickup once per path.
+•	Avoid applying microphone response, direct delay, or attenuation twice.
+•	Never attempt to recover excitation by dividing through microphone nulls.
+Room topology
+•	Closed mode uses the configured floor, ceiling, and four walls.
+•	Open mode uses the ground only.
+•	Open placement guides MUST NOT generate invisible walls or ceiling.
+Performance preservation
+•	Spatial processing MUST NOT change cue pitches, note decisions, timing instructions, articulation, or evidence classifications.
+•	Physical propagation and reflections remain capture effects.
+Bypass
+•	Return the Stage 3 audible buffer unchanged, including timeline and length.
+•	Preserve room configuration.
+•	Ignore room reflection state and tails while bypassed.
+•	Permit room processing independently of microphone processing.
+08. Stage 5 — Optional Plugin Slot
+Default
+•	Empty and bypassed.
+Inputs
+•	The current Stage 4 output.
+•	An explicitly selected compatible processor and saved processor settings.
+Output
+•	The processed final buffer with processor identity, settings, latency, tail behavior, and provenance.
+Processing
+•	Permit compatible EQ, dynamics, noise-control, or finishing processing through the existing optional slot.
+•	Keep SpectraCraft's host and integration code in Rust.
+•	Evaluate compatibility, licensing, and reproducibility before integration.
+•	Do not require a particular external service, library, or processor.
+Isolation
+•	Plugins receive only predecessor audio and declared processing context.
+•	Plugins MUST NOT access original audio, reenter extraction, rewrite shape evidence, receive surgical-edit commands, or modify upstream dry buffers.
+State
+•	Initialize processor state explicitly for offline renders.
+•	Reset processing history on bypass transitions or input-revision changes.
+•	Account for declared algorithmic latency without removing intentional acoustic propagation delay.
+Bypass
+•	Return Stage 4 audio unchanged.
+•	An empty slot behaves identically to bypass.
+09. Render Dependencies and Cache Invalidation
+Dependency graph
+•	Reference analysis → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5.
+Dry-setting change
+•	Invalidate Stage 1 and every dependent result.
+Accepted surgical change or surgical bypass change
+•	Preserve Stage 1.
+•	Invalidate Stage 2 and dependent results.
+Microphone-setting change
+•	Preserve reference evidence and both dry stages.
+•	Invalidate applicable Stage 3 and dependent results.
+Room/material change
+•	Preserve dry and microphone results when their direct-path inputs remain unchanged.
+•	Invalidate Stage 4 and Stage 5.
+Shared physical placement change
+•	Invalidate every enabled capture stage that consumes the changed geometry.
+•	Preserve analysis and dry synthesis.
+Plugin-setting change
+•	Invalidate Stage 5 only.
+Bypassed stage-specific setting change
+•	Preserve active audio.
+•	Save the changed setting for explicit reenablement.
+Display or selection-only change
+•	Invalidate no committed audio result.
+Cache records
+•	Include upstream content identity, effective stage settings, renderer/model version, format, and required deterministic state.
+•	Distinguish saved controls from effective controls when changes are pending.
+•	Include auxiliary capture-context identity in room cache keys.
+Render jobs
+•	Capture immutable input snapshots and monotonically ordered request IDs.
+•	Discard obsolete completions.
+•	Publish results only after finite-sample, format, and revision validation.
+•	Never label a previous revision as the latest result.
+Stage failures
+•	Report the failed stage and retain explicit error state.
+•	Never substitute original audio, silently bypass an enabled stage, or relabel stale output as successful processing.
+10. Source, Microphone, Material, and Profile Data
+Catalog storage
+•	Load structured local data from the capture-reference package.
+•	Preserve every recovered entry without silent filtering or truncation.
+•	Compare loaded counts against the actual package manifest.
+•	Treat the documented 138 sources, approximately 972 microphones, and 32 materials as inventory checks, never hard-coded capacity limits.
+•	Support adding or correcting compatible data entries without engine changes.
+•	Require no runtime connection to catalog websites.
+Provenance
+•	Preserve source documents, reference URLs, measurement or modeling status, uncertainty, and missing fields.
+•	Keep published facts separate from effective renderer parameters.
+•	Never invent missing measurements or precise resonance values.
+•	Label generic approximations explicitly.
+•	Disclose when different catalog entries share an implemented response.
+Source entry fields
+•	Family and source name.
+•	Published fundamental and practical playing ranges.
+•	Broad body, presence, attack, and high-frequency regions.
+•	Known resonance, formant, harmonic, and decay characteristics.
+•	Synthesis-model hint.
+•	Available provenance and missing-data flags.
+Microphone entry fields
+•	Brand, model, and transducer type.
+•	Primary and supported pickup patterns.
+•	Published response points or response-document reference.
+•	Available frequency-dependent polar data or document reference.
+•	Sensitivity, self-noise, maximum SPL, frequency range, and power requirements.
+•	Manufacturer/source documents, uncertainty, and missing fields.
+•	The implemented DSP response and pattern mapping, recorded separately.
+Microphone model rules
+•	Catalog selection MUST load associated data and effective renderer mapping.
+•	Published response data affect DSP only through an explicitly implemented response model.
+•	A catalog name or polar image cannot establish measured hardware emulation.
+•	Unsupported response data MUST remain reference information.
+Material entry fields
+•	Name, type, assembly description, and available thickness.
+•	Raw six-band absorption coefficients and their frequency bands.
+•	Effective six-band coefficients used by the renderer.
+•	Available porosity, airflow resistivity, tortuosity, viscous characteristic length, and thermal characteristic length.
+•	Test standard, source, uncertainty, and measurement/modeling status.
+Material model rules
+•	Preserve raw values independently from effective-value clamping.
+•	Validate effective absorption within 0.0..=1.0.
+•	Record any modeling adjustment.
+•	Missing acoustic parameters require an explicitly identified model or an unavailable-result state.
+Loose reference profiles
+•	Preserve compact instrument-family, microphone-style, signal-character, and room-category profiles.
+•	Store approximate spectral distributions and supported decay/noise traits.
+•	Use profile matches as bounded guidance with visible confidence.
+•	Apply accepted guidance only in the stage that owns the relevant behavior.
+Reference registry
+•	Preserve available provenance from manufacturer specifications, Mic Archive, acoustic material measurements and standards, instrument-range references, RWC/SNDB references, audio mathematics references, and DDSP/spectral-modeling literature.
+•	Preserve Leslie Gaston-Bird's Math Fundamentals for Audio as a mathematical reference where supplied.
+•	Record access and licensing conditions for recovered third-party data.
+•	Never represent private or unavailable reference data as recovered content.
+11. Acoustic Mathematics
+Internal units
+•	Distances: meters.
+•	Time: seconds and integer sample frames.
+•	Angles: one documented internal convention, converted for degree displays.
+•	Frequency: hertz.
+•	Amplitude: linear sample amplitude unless a field explicitly identifies dB.
+Existing propagation constant
+speed_of_sound_m_per_s = 343.0
+Direct and reflected delay
+delay_seconds = path_length_m / speed_of_sound_m_per_s
+delay_samples = delay_seconds * sample_rate_hz
+•	Use a documented fractional-delay implementation when required.
+Distance attenuation
+•	Pressure/amplitude follows the modeled inverse-distance relationship.
+•	Intensity follows the corresponding inverse-square relationship.
+•	Do not apply inverse-square attenuation directly to waveform amplitude.
+•	For positive distances:
+level_change_db = -20.0 * log10(distance_2 / distance_1)
+Passive reflection, per frequency band
+reflection_pressure = sqrt(1.0 - effective_absorption)
+path_reflection_pressure = product(reflection_pressure_for_each_bounce)
+Geometry
+•	Use actual path lengths, encountered surfaces, and arrival directions.
+•	Apply source radiation only when an implemented model exists.
+•	Keep a visual source-facing arrow separate from a radiation model.
+Informational acoustic estimates
+total_absorption_sabins = sum(surface_area_m2 * effective_absorption)
+estimated_rt60_seconds = 0.161 * room_volume_m3 / total_absorption_sabins
+axial_mode_hz = speed_of_sound_m_per_s * mode_index / (2.0 * dimension_m)
+Estimate limits
+•	Label RT60 and room modes as estimates.
+•	Represent zero-absorption or invalid estimates explicitly without feeding NaN or infinity into DSP.
+•	Mark closed-room estimates unavailable for open geometry.
+•	Never replace geometric reflections with a generic RT60 tail.
+Numeric verification
+•	A 0.6096 m source-to-receiver distance produces approximately 1.777 ms delay.
+•	Verify pressure factors independently from raw published coefficients.
+•	Verify changes against actual geometry rather than screenshots.
+12. Native Workspace and Display Boundaries
+Workspace
+•	Use a compact dark workstation with the audio canvas as the visual priority.
+•	Provide native menus, transport, inspector, timeline, evidence controls, Plans, and 3D views.
+•	Support resizing, docking, undocking, and reordering major panels.
+•	Preserve usable panel minimums and remembered splitter sizes.
+•	Preserve session state during layout changes.
+Empty state
+•	Show no track, measurements, generated files, or completed audit before an input is loaded.
+•	Open a demo only through an explicit, clearly labeled action backed by actual files.
+Import
+•	Provide Open WAV, native file selection, file drop, and open-by-path fallback.
+•	Show loading, ready, busy, and error states.
+•	Show actual filename, duration, sample rate, and channel policy.
+Main editing canvas
+•	Display aligned original and current dry waveform/spectral views.
+•	Keep a full-recording overview visible while editing a passage.
+•	Share time ruler, playhead, and appropriate comparison scales.
+•	Support seek, range selection, zoom-to-selection, and Fit Recording.
+•	Label spectral regions above Nyquist as unavailable data.
+Audio-derived graphics
+•	Generate waveforms and spectrograms from actual corresponding audio buffers.
+•	Preserve shared comparison scales.
+•	Display uncertainty and cue overlays as evidence annotations.
+Display-only controls
+•	Inspector tabs, layer View, visual contrast, frequency-display limits, display precision, unit selection, overlays, projection, camera movement, zoom, fit commands, layout changes, and snap-toggle changes affect display state only.
+•	Export precision and audio-processing settings remain separate controls.
+Existing analysis layers
+•	Preserve Pitch, Faint Ringing, Texture, and Breath Accent layers.
+•	Retain Mute, Solo, gain, View, Reset, and editable-analysis save/load.
+•	Treat Mute, Solo, and gain as explicit audio controls.
+•	Treat View as display selection only.
+•	Keep audition gains separate from measured analysis data.
+•	Route accepted audio-affecting changes through the appropriate dry stage.
+Inspector order and location
+•	Dock the inspector on the left by default.
+•	Order tabs as Source → Microphone → Materials → Room Size.
+•	Keep source and microphone markers visible across tabs.
+•	Preserve source selection, placement, aim, materials, room, and playback during tab or view changes.
+13. Inspector Controls and Shared 3D Scene
+Shared scene
+•	Maintain one authoritative physical scene.
+•	Use X for left/right, Y for depth, and Z for height.
+•	Map room width to X, room length/depth to Y, and room height to Z.
+•	Store physical dimensions in meters.
+•	Derive every plan, 3D view, readout, and capture input from the same state.
+Source tab
+•	Provide Unknown, Instrument → family → source, and Human → Male / Female / Other-Ensemble selection.
+•	Show published source data separately from effective synthesis parameters.
+•	Keep a small recognizable source icon visible.
+Source placement
+•	Initialize the source at the footprint center and 1.524 m above the floor.
+•	Permit independent X/Y/Z movement.
+•	Provide optional center and 5 ft height locks, both off by default.
+•	Preserve user placement during room resizing unless an explicit lock applies.
+•	Reset Source restores center and 5 ft height without resetting microphones or materials.
+•	Show exact position and floor-height readouts.
+Microphone tab
+•	Provide search and Brand → Model selection.
+•	Preserve independent model, pattern, position, and aim per microphone slot.
+•	Show the selected slot clearly.
+•	Preserve position and aim when replacing a model.
+•	Show effective pattern and response beside published specifications.
+•	Keep a small pattern symbol and compact polar chart visible.
+•	Use a separate toggle for larger pattern overlays.
+Microphone placement
+•	Top-view dragging changes X/Y and preserves Z.
+•	Front-view dragging changes X/Z and preserves Y.
+•	Provide exact numeric coordinates and live source-distance readouts.
+•	Preserve aim during placement changes unless Follow Source is enabled.
+•	Support grid snapping without changing existing positions when snap toggles.
+•	Reset Mic restores a valid configured default or last valid position.
+Microphone aim
+•	Provide typed X tilt, Y roll, and Z heading.
+•	Provide rotation control, right-angle snaps, and six grid directions.
+•	Snap to Source performs one aim adjustment.
+•	Follow Source updates aim when either source or microphone moves.
+•	Aim commands never move the microphone.
+•	Rotation release within 8 degrees of a grid axis snaps to that axis with brief visual feedback.
+Reference capture setup
+•	Retain a labeled SM7-style approximation approximately 2 ft from the source, aimed at the source, for repeatable capture checks.
+•	Keep that setup inactive while microphone processing is bypassed.
+Materials tab
+•	Provide independent floor, ceiling, and four-wall assignments.
+•	Provide search across the full recovered material catalog.
+•	Show assembly information, raw coefficients, effective coefficients, available physical parameters, and provenance.
+•	Changing one surface preserves every other surface assignment.
+Room Size tab
+•	Small: 10 × 10 ft footprint.
+•	Medium: 20 × 20 ft footprint.
+•	Large: 50 × 50 ft footprint.
+•	Default height: 10 ft.
+•	Open: ground only, initially shown within a 50 × 50 × 50 ft placement guide.
+•	Provide editable width, length/depth, and height.
+•	Link width and length initially; keep height independent initially.
+•	Provide individual dimension links, Link All, and Unlink All.
+•	Editing a linked dimension updates only the linked dimensions.
+Display units
+•	Support feet, inches, yards, millimeters, centimeters, and meters.
+•	Convert presentation values without changing physical scene state.
+Plans
+•	Provide linked Top X/Y and Front X/Z views.
+•	Share physical grid spacing, X divisions, pan, and zoom.
+•	Preserve truthful depth and height outlines when dimensions differ.
+•	Label rulers and physical distance per square.
+3D Grid
+•	Show the same floor, boundaries, source, microphone slots, and axes.
+•	Bare-grid drag orbits.
+•	Shift-drag on empty space pans.
+•	Wheel zooms.
+•	Orthographic, Perspective, and Fit View affect only the camera.
+•	Empty-space interaction never edits source or microphone placement.
+Placement guidance
+•	Preserve source-to-microphone distance and direct-delay readouts.
+•	Keep multi-microphone distance-ratio guidance informational.
+•	Do not present a distance ratio as guaranteed freedom from comb filtering.
+•	Preserve supported ORTF, X/Y, and spaced-pair helpers.
+•	Use ORTF's 17 cm spacing and 110-degree included angle where that preset is implemented.
+•	Define spaced-pair half-spacing and total spacing separately.
+•	Show actual resulting geometry before treating a helper as applied.
+•	Displaying guidance changes no audio; applying placement changes the scene.
+14. Playback, Preview, Export, and Review
+Transport
+•	Provide Play/Pause, numeric position, and Space shortcut when focus permits.
+•	Let the playback engine own the playhead.
+•	Never seek because a rounded time display redraws.
+•	Preserve logical time when switching Original and Regenerated audition.
+Comparison monitoring
+•	Keep original monitoring outside the processing graph.
+•	Level-match audition copies without modifying source or exported audio.
+•	Retain Difference monitoring only when the buffer contains the actual aligned generated-minus-reference comparison.
+•	Never use comparison buffers as reconstruction or capture inputs.
+Background update
+•	Debounce substantive live adjustments.
+•	Render outside the audio callback.
+•	Crossfade validated replacement buffers at the current logical playhead.
+•	Preserve playback position during microphone, room, or source rerendering.
+Preview versus export
+•	Preview controls MUST NOT silently change export settings.
+•	Export commands MUST identify the exact stage and current revision.
+•	Exporting Stage 2 MUST include accepted surgical fixes.
+•	Exporting any stage MUST use a complete, valid result for that stage.
+Export selection
+•	Preserve individual, selected-subset, and all-requested-output selection.
+•	Present available stage outputs and existing generated-layer outputs explicitly.
+•	Do not require a bundled suite of named character variants.
+Export files
+•	Write usable WAV files to new destinations.
+•	Preserve logical timeline alignment.
+•	Preserve declared acoustic tails rather than silently trimming tails.
+•	Record sample format, stage settings, latency, physical delay, and provenance.
+•	Keep ordinary dry and capture outputs unmastered with editing headroom.
+•	Permit finishing behavior only through an explicitly enabled plugin.
+•	Never apply hidden normalization during bypass or surgical acceptance.
+Original export
+•	An explicitly requested original copy remains an unchanged reference asset.
+•	Keep the reference copy separate from generated pipeline outputs.
+Review state
+•	Mark generated audio Candidate until a human listening review is recorded.
+•	Bind review status to the exact effective dry revision.
+•	Invalidate the corresponding review when committed dry audio changes.
+•	Permit candidate audition and stage export without claiming approval.
+•	Numerical measurements cannot create Reviewed or Accepted status.
+•	Report unavailable listening assessment honestly.
+15. Error Handling and Real-time Safety
+Input validation
+•	Reject non-finite values and invalid dimensions with actionable errors.
+•	Handle unsupported formats, corrupt files, missing catalog data, and incompatible processor settings without panics.
+•	Define and expose actual duration, format, memory, and processing limits.
+•	Never silently apply historical excerpt limits to a full-track request.
+Geometry validation
+•	Reject invalid closed-room placements while retaining the last valid state.
+•	Treat an open-space guide as a view aid rather than a closed boundary.
+•	Handle coincident source/receiver positions explicitly without singular distance gain.
+•	Validate material coefficients before reflection calculations.
+Audio thread
+•	Perform no blocking file access, contended locking, or avoidable allocation inside the playback callback.
+•	Handle device removal, sample-rate changes, and underruns explicitly.
+•	Prevent NaN/Inf propagation and stale-render races.
+Rust implementation
+•	Propagate meaningful Result values.
+•	Avoid runtime panic paths for recoverable user or device errors.
+•	Keep unsafe code minimal and document the upheld safety invariant.
+•	Use appropriate numerical tolerances for mathematical comparisons.
+•	Use exact sample or hash comparisons for deterministic and bypass contracts.
+Resource handling
+•	Respect file permissions and validate user-supplied paths.
+•	Protect original assets and committed outputs from accidental overwrite.
+•	Clean temporary results after cancellation or failure.
+•	Bound processing memory for long takes.
+Dependency integration
+•	Adopt shared Rust infrastructure only for an identified application need.
+•	Keep shape extraction, regeneration, catalogs, and capture mathematics controlled by SpectraCraft.
+•	Pin compatible craft-libs dependencies to one revision when adopted.
+•	Preserve required attribution and verify actual crate availability/licenses.
+•	Require no runtime access to a dependency repository.
+16. Required Verification
+Baseline
+•	Inspect manifests, lockfile, source, tests, reproduction instructions, migration records, and supplied acceptance documents before engine changes.
+•	Record actual repository capabilities and baseline test results.
+•	Separate structural refactoring from intentional behavior changes.
+Source isolation
+•	Render from a saved cue packet in a run without original-file access.
+•	Render a second output from the same packet and effective configuration.
+•	Verify sample-identical deterministic dry output.
+•	Verify original checksums before and after processing.
+Performance controls
+•	Use Rust-generated known controls for:
+o	weak fundamentals
+o	genuine octave jumps
+o	continuous slides
+o	repeated notes
+o	overlapping ringing
+o	quiet attacks
+o	silence
+o	unrelated clicks and chirps.
+•	Test multiple sample rates and held-out controls.
+Evidence reporting
+•	Report jointly resolved frames, agreed frames, disagreement, octave errors, and unresolved frames separately.
+•	Show agreement denominators for jointly resolved and all evaluated frames.
+•	Never octave-fold genuine errors away.
+•	Keep envelope, pitch, headroom, and listening findings separate.
+Full-track verification
+•	Verify the complete supplied guitar reference using actual file identity.
+•	Make the 20–27 s passage and approximately 25.5 s transition reachable.
+•	Preserve unresolved transition evidence.
+•	Never substitute another decode or duration without separate provenance.
+Stage verification
+•	Check declared input/output ownership and every bypass contract.
+•	Check all optional stages bypassed yields the current dry buffer unchanged.
+•	Check room-only capture uses neutral pickup and valid geometry.
+•	Check direct and reflected paths receive each acoustic operation once.
+•	Check downstream changes preserve dry caches.
+•	Check enabled-stage errors cannot become silent bypasses.
+Surgical verification
+•	Check rectangle/range creation, movement, every resize edge, and deletion.
+•	Check selection-only operations preserve committed audio.
+•	Check stale candidate rejection and independent undo/redo.
+•	Check samples outside accepted temporal bounds remain bit-identical.
+•	Check frequency-limited edits cannot silently become full-band edits.
+•	Check accepted fixes appear in dry export.
+•	Check downstream invalidation follows acceptance rather than selection.
+Scene and catalog verification
+•	Check full catalog counts against package manifests.
+•	Select entries near the end of each catalog and inspect actual loaded data.
+•	Check microphone model changes preserve pose.
+•	Check one material assignment preserves the other five assignments.
+•	Check actual capture changes when an effective enabled parameter changes.
+•	Check equivalent implemented profiles are not falsely reported as distinct.
+•	Check Plans, 3D, numeric fields, and capture geometry remain synchronized.
+Display verification
+•	Check orbit, pan, zoom, projection, units, overlays, tabs, panel changes, layer View, and snap toggles preserve audio samples and render fingerprints.
+•	Check source/microphone positions survive camera and layout operations.
+Application verification
+•	Exercise empty state, import, complete timeline navigation, regeneration, region preview, Apply/Undo, stage bypass, playback/seek, project save/reopen, and aligned WAV export.
+•	Verify generated plots and reported measurements against actual artifacts.
+Rust quality checks
+cargo fmt --all --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-targets --all-features
+cargo build --locked --release --all-targets --all-features
+cargo audit
+cargo outdated
+cargo tree -d
+cargo deny check
+Audit reporting
+•	Identify concrete findings by severity, location, and evidence.
+•	Separate confirmed bugs, potential issues, dependency advisories, and static-analysis findings.
+•	Record exact commands and actual results.
+•	Mark unavailable or unexecuted checks NOT RUN.
+Platform claims
+•	Verify each claimed platform independently through build, import, playback, state persistence, and export checks.
+•	A build on one platform cannot establish another platform's runtime support.
+17. Implementation Completion and Handoff
+Core milestone
+•	Demonstrate import of one source, saved shape/cues, source-free dry synthesis, aligned original/dry display, basic region selection, and real playback.
+Surgical milestone
+•	Demonstrate localized candidate generation, bounded acceptance, live region preview, independent undo/redo, and export of the current edited dry take.
+Capture milestone
+•	Demonstrate independent microphone and room enablement, physical scene consistency, explicit propagation accounting, and preserved dry caches.
+Plugin milestone
+•	Demonstrate an empty identity slot, compatible explicit processing, reset behavior, and isolation from all upstream data.
+Handoff
+•	Provide updated Rust source, manifests, lockfile, tests, catalog provenance, reproduction commands, and a concise changelog.
+•	Separate PASS, FAIL, and NOT RUN evidence.
+•	Tie every reported metric, plot, and output to actual input, cue, settings, and render identities.
+•	Report remaining uncertainty and unverified listening or platform behavior.
+•	Treat screenshots and numerical scores as supporting evidence rather than proof of completed audio fidelity.

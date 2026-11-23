@@ -1,0 +1,10 @@
+{
+  "after_jumps": 14,
+  "before_jumps": 26,
+  "max_pitch_difference_vs_archived_hz": 0.0,
+  "non_pitch_cues_unchanged": true,
+  "passed": true,
+  "restored_jumps": 20,
+  "source_sha256": "ff8b510f42bd709354c53342b75abd748dddd7687f0ba95e9bb8d388f44e576c",
+  "source_unchanged": true
+}

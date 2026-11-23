@@ -1,0 +1,93 @@
+{
+  "metal": {
+    "audition": {
+      "clips": [
+        {
+          "audition_dbtp": -6.37118776576799,
+          "audition_lufs": -13.963982790372928,
+          "gain": 0.4890241957297713,
+          "name": "treated",
+          "raw_dbtp": -0.15779455496246683,
+          "raw_lufs": -7.7505897402058475
+        },
+        {
+          "audition_dbtp": -3.0000017118972986,
+          "audition_lufs": -13.963982790372935,
+          "gain": 0.2593639257968241,
+          "name": "metal",
+          "raw_dbtp": 8.721808577132487,
+          "raw_lufs": -2.2421742132404616
+        }
+      ],
+      "meter": "ebur128 0.1.10 Rust; no external executable",
+      "target_lufs": -13.963982790372949
+    },
+    "reflection_energy_db": [
+      -24.943502968495224,
+      5.336756593581535
+    ]
+  },
+  "panels": {
+    "audition": {
+      "clips": [
+        {
+          "audition_dbtp": -3.1247184197127433,
+          "audition_lufs": -10.891355106975979,
+          "gain": 0.6820739670552928,
+          "name": "cardioid-1in",
+          "raw_dbtp": 0.19865230678921758,
+          "raw_lufs": -7.567984586677077
+        },
+        {
+          "audition_dbtp": -3.0,
+          "audition_lufs": -10.891355106976013,
+          "gain": 0.6518259686330544,
+          "name": "omni-1in",
+          "raw_dbtp": 0.7173668261938764,
+          "raw_lufs": -7.173988280782114
+        },
+        {
+          "audition_dbtp": -3.396714817881947,
+          "audition_lufs": -10.891355106975984,
+          "gain": 0.6997376098947555,
+          "name": "cardioid-2in",
+          "raw_dbtp": -0.29542036331621213,
+          "raw_lufs": -7.790059451898553
+        }
+      ],
+      "meter": "ebur128 0.1.10 Rust; no external executable",
+      "target_lufs": -10.89135510697599
+    },
+    "fixed_delays_ms": [
+      21.79603757223795,
+      21.796037572237957,
+      24.821152666933948,
+      17.716132224780733,
+      4.206676580318875,
+      40.22734917899301
+    ]
+  },
+  "source_unchanged": true,
+  "virtual": {
+    "clips": [
+      {
+        "audition_dbtp": -3.9264983597998953,
+        "audition_lufs": -11.250946552270548,
+        "gain": 0.6846587878647291,
+        "name": "dry",
+        "raw_dbtp": -0.6359814807177995,
+        "raw_lufs": -7.960430289648922
+      },
+      {
+        "audition_dbtp": -1.9999995886470454,
+        "audition_lufs": -11.25094655227054,
+        "gain": 0.5753956371807373,
+        "name": "room",
+        "raw_dbtp": 2.8006687076387298,
+        "raw_lufs": -6.450277844631809
+      }
+    ],
+    "meter": "ebur128 0.1.10 Rust; no external executable",
+    "target_lufs": -11.250946552270538
+  }
+}

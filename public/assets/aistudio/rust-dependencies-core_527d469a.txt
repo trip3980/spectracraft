@@ -1,0 +1,32 @@
+spectral-canvas-mono v0.1.0 (/workspace/scratch/7e8e50e9d14f/spectral-canvas-recovery/audit-preview5)
+├── hound v3.5.1
+├── rustfft v6.4.1
+│   ├── num-complex v0.4.6
+│   │   └── num-traits v0.2.19
+│   │       [build-dependencies]
+│   │       └── autocfg v1.5.1
+│   ├── num-integer v0.1.47
+│   │   └── num-traits v0.2.19 (*)
+│   ├── num-traits v0.2.19 (*)
+│   ├── primal-check v0.3.4
+│   │   └── num-integer v0.1.47 (*)
+│   ├── strength_reduce v0.2.4
+│   └── transpose v0.2.3
+│       ├── num-integer v0.1.47 (*)
+│       └── strength_reduce v0.2.4
+├── serde v1.0.228
+│   ├── serde_core v1.0.228
+│   └── serde_derive v1.0.228 (proc-macro)
+│       ├── proc-macro2 v1.0.107
+│       │   └── unicode-ident v1.0.27
+│       ├── quote v1.0.47
+│       │   └── proc-macro2 v1.0.107 (*)
+│       └── syn v2.0.119
+│           ├── proc-macro2 v1.0.107 (*)
+│           ├── quote v1.0.47 (*)
+│           └── unicode-ident v1.0.27
+└── serde_json v1.0.150
+    ├── itoa v1.0.19
+    ├── memchr v2.8.3
+    ├── serde_core v1.0.228
+    └── zmij v1.0.23

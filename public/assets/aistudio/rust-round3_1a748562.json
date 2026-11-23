@@ -1,0 +1,586 @@
+{
+  "holdout": {
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-001-boilerplate/Samples/PolyBrute Triangle Wave-C2-V127-MW79.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -1.0,
+          "peak_share_db": -0.021798697545316777,
+          "tail_shape_db": -0.01442507054044087
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.04074835163827353,
+            "tail_shape_db": -0.002829368459136908
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": -0.02190274303419392,
+            "tail_shape_db": -0.010088020475201659
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.02280116739236612,
+            "tail_shape_db": -0.008063325138626877
+          }
+        }
+      }
+    },
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-001-boilerplate/Samples/PolyBrute Triangle Wave-C6-V127-1VCE.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -1.0,
+          "peak_share_db": 0.0008538985674803183,
+          "tail_shape_db": -0.0026066802694148655
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": 0.0008242292202683332,
+            "tail_shape_db": -0.00938887189301639
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": 0.0008538985674803183,
+            "tail_shape_db": -0.0026066802694148655
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": 0.0008158487698382112,
+            "tail_shape_db": -0.0052490058508973605
+          }
+        }
+      }
+    },
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-002-how-to-make-buttons/Samples/Deux.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -1.0,
+          "tail_shape_db": 0.46473929837683414
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.4340652869595516
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.46473929837683414
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.053721907711640426
+          }
+        }
+      }
+    },
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-002-how-to-make-buttons/Samples/Three.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": 0.0,
+          "tail_shape_db": 0.32134868756891066
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.16151560130546017
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.32134868756891066
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.059694946349047484
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/55_G3_01_00.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -5.0,
+          "peak_share_db": -0.9120832179091602,
+          "tail_shape_db": -0.005790362456371767
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -1.2644190331190732,
+            "tail_shape_db": -0.12387760603180986
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.9123445370608018,
+            "tail_shape_db": -0.005790362456371767
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.9209878217089861,
+            "tail_shape_db": -0.07928556240814366
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/65_F4_01_00.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -4.0,
+          "peak_share_db": 0.10270746756865479,
+          "tail_shape_db": 0.12404208569324382
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.10225398657437404,
+            "tail_shape_db": 0.2779190091891408
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.10214169378876406,
+            "tail_shape_db": 0.12404208569324382
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.08861433273409798,
+            "tail_shape_db": 0.029684937696302427
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/67_G4_01_00.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -1.0,
+          "peak_share_db": -0.8422388693448234,
+          "tail_shape_db": 0.20800014533530398
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.7318188160980452,
+            "tail_shape_db": 0.022191336033885456
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": -0.8415497173818776,
+            "tail_shape_db": 0.20800014533530398
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": -0.9958806802220853,
+            "tail_shape_db": 0.1940926743877469
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/81_A5_01_00.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": 0.0,
+          "peak_share_db": 0.05736332182355526,
+          "tail_shape_db": 0.6632462935694257
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.03908991945245175,
+            "tail_shape_db": -0.0005944995289048904
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.05609638002222521,
+            "tail_shape_db": 0.6632462935694257
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.03547811574366049,
+            "tail_shape_db": -0.16299639558108936
+          }
+        }
+      }
+    }
+  },
+  "prior": {
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-001-boilerplate/Samples/PolyBrute Triangle Wave-C1-V127-OJF2.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": 0.0,
+          "peak_share_db": -0.2631292538922272,
+          "tail_shape_db": -0.019024148619089715
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.15875823968603775,
+            "tail_shape_db": -0.03186009773968517
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.2646623717370426,
+            "tail_shape_db": -0.0020591193657012036
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.201411473563005,
+            "tail_shape_db": -0.02380647418636085
+          }
+        }
+      }
+    },
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-001-boilerplate/Samples/PolyBrute Triangle Wave-C5-V127-124D.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -1.0,
+          "peak_share_db": -0.0004508900441661418,
+          "tail_shape_db": -0.0027543970102615334
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": -0.0003306012408143987,
+            "tail_shape_db": -0.004701197861115725
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": -1.0,
+            "peak_share_db": -0.0004508900441661418,
+            "tail_shape_db": -0.0027543970102615334
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.0001677906989374128,
+            "tail_shape_db": -0.00914912720577754
+          }
+        }
+      }
+    },
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-002-how-to-make-buttons/Samples/One.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": 3.0,
+          "tail_shape_db": -1.0526042198450156
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": -1.3365519072669088
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": -0.704672718375619
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.9071045720289561
+          }
+        }
+      }
+    },
+    "DecentSampler-Sample-Library-Examples-4d212d15f0145232b44130c0a5ea0d57b020f2ca/example-002-how-to-make-buttons/Samples/Quatre.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": 0.0,
+          "tail_shape_db": 0.7093954352561909
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.5470930109123913
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.7473466153697217
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "tail_shape_db": 0.21493959377746563
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/60_C4_01_00.wav": {
+      "before": {
+        "failed": [
+          "attack_ms"
+        ],
+        "metrics": {
+          "attack_ms": 9.0,
+          "peak_share_db": -2.135207460266129,
+          "tail_shape_db": 0.25600413292535684
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -1.8632645223370154,
+            "tail_shape_db": 0.3061181850215746
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -2.130629499418955,
+            "tail_shape_db": 0.25600413292535684
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -2.239118852105233,
+            "tail_shape_db": -0.07164134081732598
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/69_A4_00_00.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": 0.0,
+          "peak_share_db": -0.4662060791039827,
+          "tail_shape_db": 0.10202484551373381
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.5773880174963355,
+            "tail_shape_db": -0.05425405978378883
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.4674676536316904,
+            "tail_shape_db": 0.10202484551373381
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": -0.37645355899723054,
+            "tail_shape_db": 0.07053504218495021
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/72_C5_01_00.wav": {
+      "before": {
+        "failed": [
+          "attack_ms"
+        ],
+        "metrics": {
+          "attack_ms": 18.0,
+          "peak_share_db": 0.44984350783780025,
+          "tail_shape_db": 0.13757396172395886
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.4435430121804036,
+            "tail_shape_db": 0.13818899214945723
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.445321018520263,
+            "tail_shape_db": 0.14071229121247875
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.45728284804861774,
+            "tail_shape_db": 0.08041859205426327
+          }
+        }
+      }
+    },
+    "SIMPK_03_Clavichord/assets/wav/lupe/76_E5_01_00.wav": {
+      "before": {
+        "failed": [],
+        "metrics": {
+          "attack_ms": -1.0,
+          "peak_share_db": 0.032430607189553894,
+          "tail_shape_db": 0.06359385199882794
+        }
+      },
+      "rate": 48000,
+      "seeds": {
+        "1229": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.07705819619735726,
+            "tail_shape_db": -0.07833715572616029
+          }
+        },
+        "734": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.03211690141709339,
+            "tail_shape_db": 0.06359385199882794
+          }
+        },
+        "927": {
+          "failed": [],
+          "metrics": {
+            "attack_ms": 0.0,
+            "peak_share_db": 0.05230097506133523,
+            "tail_shape_db": 0.11981466672205343
+          }
+        }
+      }
+    }
+  }
+}

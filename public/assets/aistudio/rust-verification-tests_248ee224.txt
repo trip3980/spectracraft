@@ -1,0 +1,26 @@
+   Compiling spectral-canvas-mono v0.1.0 (/workspace/scratch/7e8e50e9d14f/spectral-canvas-recovery/audit-preview5)
+    Finished `release` profile [optimized] target(s) in 28.59s
+     Running tests/attack_rates.rs (target/release/deps/attack_rates-f8c5bf7f37f246d4)
+
+running 2 tests
+test quiet_attacks_work_at_native_rates_without_changing_the_strike ... ok
+test attack_packet_roundtrip_renders_all_layers_without_source_pcm ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/boundaries.rs (target/release/deps/boundaries-be5edc0c02079932)
+
+running 2 tests
+test unsupported_or_cross_event_patch_is_rejected ... ok
+test supported_pitch_patch_preserves_every_other_cue_and_is_atomic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/sample_rates.rs (target/release/deps/sample_rates-0984a2f4a538a8e4)
+
+running 2 tests
+test invalid_analysis_inputs_fail_and_silent_packet_is_strict_json ... ok
+test original_sample_rate_pitch_noise_and_silence_gates ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.89s
+

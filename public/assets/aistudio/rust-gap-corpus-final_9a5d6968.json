@@ -1,0 +1,1947 @@
+{
+  "filled": 163,
+  "flute_sha256": "847bc05758bfecf7abcc2d219de89f2a3de478c08a8b12ef69a5a93ccf54ae96",
+  "rows": [
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 0.45
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 3.913845153484642,
+      "ms": 2.0,
+      "time_s": 0.45
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 1.6273667299130976,
+      "ms": 4.0,
+      "time_s": 0.45
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 20.624570878085894,
+      "ms": 0.5,
+      "time_s": 0.8
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 23.54785308532117,
+      "ms": 2.0,
+      "time_s": 0.8
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 21.628077705713157,
+      "ms": 4.0,
+      "time_s": 0.8
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 33.27632501176471,
+      "ms": 0.5,
+      "time_s": 1.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.34660529370798,
+      "ms": 2.0,
+      "time_s": 1.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.898430863531928,
+      "ms": 4.0,
+      "time_s": 1.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 34.998341291578704,
+      "ms": 0.5,
+      "time_s": 1.55
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 35.447463850766155,
+      "ms": 2.0,
+      "time_s": 1.55
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 34.47838246365023,
+      "ms": 4.0,
+      "time_s": 1.55
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 7.176647349790956,
+      "ms": 0.5,
+      "time_s": 3.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 9.913335128102961,
+      "ms": 2.0,
+      "time_s": 3.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 3.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.363586446867842,
+      "ms": 0.5,
+      "time_s": 4.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.271093800678944,
+      "ms": 2.0,
+      "time_s": 4.2
+    },
+    {
+      "case": "Iowa flute vibrato",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 30.756819460284007,
+      "ms": 4.0,
+      "time_s": 4.2
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 25.610915061085432,
+      "ms": 0.5,
+      "time_s": 0.98
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 13.715103034254003,
+      "ms": 2.0,
+      "time_s": 0.98
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 36.38995888142739,
+      "ms": 0.5,
+      "time_s": 1.49
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 14.718846609311045,
+      "ms": 2.0,
+      "time_s": 1.49
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 2.19
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 2.19
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 19.396199318556842,
+      "ms": 0.5,
+      "time_s": 3.47
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 3.47
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 12.568743850702486,
+      "ms": 0.5,
+      "time_s": 4.4
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 4.4
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 18.799971852176,
+      "ms": 0.5,
+      "time_s": 5.16
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 9.071492484964441,
+      "ms": 2.0,
+      "time_s": 5.16
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 20.86755437423581,
+      "ms": 0.5,
+      "time_s": 6.63
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 6.63
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 17.646008548181907,
+      "ms": 0.5,
+      "time_s": 8.2
+    },
+    {
+      "case": "stereo vocal excerpt",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 11.65452086621108,
+      "ms": 2.0,
+      "time_s": 8.2
+    },
+    {
+      "case": "intact flute control",
+      "channels": 1,
+      "decision": "audio is already present in selected patch",
+      "error_reduction_db": null,
+      "ms": 2.0,
+      "time_s": 0.8
+    },
+    {
+      "case": "unmarked flute control",
+      "channels": 1,
+      "decision": "needs an explicitly identified 0.25–4 ms loss",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 0.8
+    },
+    {
+      "case": "synthetic noisy transient",
+      "channels": 1,
+      "decision": "needs an explicitly identified 0.25–4 ms loss",
+      "error_reduction_db": 0.0,
+      "ms": 12.0,
+      "time_s": 0.35
+    },
+    {
+      "case": "synthetic noisy transient",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 0.35
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 18.47172468233086,
+      "ms": 0.5,
+      "time_s": 0.17
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 16.763763139568447,
+      "ms": 2.0,
+      "time_s": 0.17
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 15.407851795309371,
+      "ms": 4.0,
+      "time_s": 0.17
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 0.34
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 0.34
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 0.34
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 0.51
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 0.51
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 0.51
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 18.137067455320157,
+      "ms": 0.5,
+      "time_s": 0.68
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 15.455203430682314,
+      "ms": 2.0,
+      "time_s": 0.68
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 13.837291099742547,
+      "ms": 4.0,
+      "time_s": 0.68
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.971694737509043,
+      "ms": 0.5,
+      "time_s": 0.8500000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 26.50062377332144,
+      "ms": 2.0,
+      "time_s": 0.8500000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 25.818906188619405,
+      "ms": 4.0,
+      "time_s": 0.8500000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.923757653363584,
+      "ms": 0.5,
+      "time_s": 1.02
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.107129736654006,
+      "ms": 2.0,
+      "time_s": 1.02
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.397781075855242,
+      "ms": 4.0,
+      "time_s": 1.02
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 25.82430711824002,
+      "ms": 0.5,
+      "time_s": 1.19
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.67767143056514,
+      "ms": 2.0,
+      "time_s": 1.19
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 25.900147883059915,
+      "ms": 4.0,
+      "time_s": 1.19
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 34.008194077942576,
+      "ms": 0.5,
+      "time_s": 1.36
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 30.05981631186274,
+      "ms": 2.0,
+      "time_s": 1.36
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.16948783227435,
+      "ms": 4.0,
+      "time_s": 1.36
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.351115976452423,
+      "ms": 0.5,
+      "time_s": 1.53
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.785058768969776,
+      "ms": 2.0,
+      "time_s": 1.53
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.430768098378604,
+      "ms": 4.0,
+      "time_s": 1.53
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 32.19129819605181,
+      "ms": 0.5,
+      "time_s": 1.7
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 24.496246269978087,
+      "ms": 2.0,
+      "time_s": 1.7
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.06241051109084,
+      "ms": 4.0,
+      "time_s": 1.7
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.46687297201293,
+      "ms": 0.5,
+      "time_s": 1.87
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 32.10406029820807,
+      "ms": 2.0,
+      "time_s": 1.87
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 32.28005376673349,
+      "ms": 4.0,
+      "time_s": 1.87
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.685039409978927,
+      "ms": 0.5,
+      "time_s": 2.04
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 30.0813109878584,
+      "ms": 2.0,
+      "time_s": 2.04
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 30.703691186261782,
+      "ms": 4.0,
+      "time_s": 2.04
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.17984696269442,
+      "ms": 0.5,
+      "time_s": 2.21
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.869328466054085,
+      "ms": 2.0,
+      "time_s": 2.21
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.853380539323148,
+      "ms": 4.0,
+      "time_s": 2.21
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 34.14837656045248,
+      "ms": 0.5,
+      "time_s": 2.38
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.02450781580226,
+      "ms": 2.0,
+      "time_s": 2.38
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.552234777404028,
+      "ms": 4.0,
+      "time_s": 2.38
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 2.5500000000000003
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 2.5500000000000003
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 2.5500000000000003
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 2.72
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 2.72
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 2.72
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 2.89
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 2.89
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 2.89
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": null,
+      "ms": 0.5,
+      "time_s": 3.06
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": null,
+      "ms": 2.0,
+      "time_s": 3.06
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": null,
+      "ms": 4.0,
+      "time_s": 3.06
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 9.95922169720784,
+      "ms": 0.5,
+      "time_s": 3.23
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 8.416285217332902,
+      "ms": 2.0,
+      "time_s": 3.23
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 8.821794155221049,
+      "ms": 4.0,
+      "time_s": 3.23
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 3.4000000000000004
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 3.4000000000000004
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 3.4000000000000004
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 32.57306208582343,
+      "ms": 0.5,
+      "time_s": 3.5700000000000003
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.489222607160414,
+      "ms": 2.0,
+      "time_s": 3.5700000000000003
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.973348914466506,
+      "ms": 4.0,
+      "time_s": 3.5700000000000003
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 30.912855800398216,
+      "ms": 0.5,
+      "time_s": 3.74
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.790806969887473,
+      "ms": 2.0,
+      "time_s": 3.74
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.640532056437735,
+      "ms": 4.0,
+      "time_s": 3.74
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 32.83608658301371,
+      "ms": 0.5,
+      "time_s": 3.91
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 26.360536458203473,
+      "ms": 2.0,
+      "time_s": 3.91
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 26.5793625920817,
+      "ms": 4.0,
+      "time_s": 3.91
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.654976793269025,
+      "ms": 0.5,
+      "time_s": 4.08
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 30.729709897903682,
+      "ms": 2.0,
+      "time_s": 4.08
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.948855993116947,
+      "ms": 4.0,
+      "time_s": 4.08
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 32.708845762729986,
+      "ms": 0.5,
+      "time_s": 4.25
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.136507662605283,
+      "ms": 2.0,
+      "time_s": 4.25
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 31.252564977023244,
+      "ms": 4.0,
+      "time_s": 4.25
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.902681793551455,
+      "ms": 0.5,
+      "time_s": 4.42
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.787158678966374,
+      "ms": 2.0,
+      "time_s": 4.42
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 25.842323259325667,
+      "ms": 4.0,
+      "time_s": 4.42
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 29.345706927628527,
+      "ms": 0.5,
+      "time_s": 4.59
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.668179730703606,
+      "ms": 2.0,
+      "time_s": 4.59
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.625125079484675,
+      "ms": 4.0,
+      "time_s": 4.59
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 33.74242087811273,
+      "ms": 0.5,
+      "time_s": 4.760000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.177800499163965,
+      "ms": 2.0,
+      "time_s": 4.760000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.36758689911724,
+      "ms": 4.0,
+      "time_s": 4.760000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.374102082353865,
+      "ms": 0.5,
+      "time_s": 4.930000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 26.993657187609806,
+      "ms": 2.0,
+      "time_s": 4.930000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 26.69625806467628,
+      "ms": 4.0,
+      "time_s": 4.930000000000001
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 33.06760471106444,
+      "ms": 0.5,
+      "time_s": 5.1000000000000005
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.29042411520416,
+      "ms": 2.0,
+      "time_s": 5.1000000000000005
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.505632933670316,
+      "ms": 4.0,
+      "time_s": 5.1000000000000005
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 28.75378771062752,
+      "ms": 0.5,
+      "time_s": 5.2700000000000005
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 27.757090144169187,
+      "ms": 2.0,
+      "time_s": 5.2700000000000005
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 26.538901194869343,
+      "ms": 4.0,
+      "time_s": 5.2700000000000005
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "filled",
+      "error_reduction_db": 22.574967681322924,
+      "ms": 0.5,
+      "time_s": 5.44
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 5.44
+    },
+    {
+      "case": "stress flute",
+      "channels": 1,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 5.44
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 24.79782303766219,
+      "ms": 0.5,
+      "time_s": 0.19
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 16.59989525004644,
+      "ms": 2.0,
+      "time_s": 0.19
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 17.140044535232395,
+      "ms": 4.0,
+      "time_s": 0.19
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 23.97907444536812,
+      "ms": 0.5,
+      "time_s": 0.455
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 13.876281039562903,
+      "ms": 2.0,
+      "time_s": 0.455
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.092986683480357,
+      "ms": 4.0,
+      "time_s": 0.455
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 33.00718506315523,
+      "ms": 0.5,
+      "time_s": 0.72
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 18.15975349066236,
+      "ms": 2.0,
+      "time_s": 0.72
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 17.329353837586574,
+      "ms": 4.0,
+      "time_s": 0.72
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 18.89671735904465,
+      "ms": 0.5,
+      "time_s": 0.9850000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 14.159837622638982,
+      "ms": 2.0,
+      "time_s": 0.9850000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 12.794780250212055,
+      "ms": 4.0,
+      "time_s": 0.9850000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 1.25
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 1.25
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 1.25
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 23.818038874113924,
+      "ms": 0.5,
+      "time_s": 1.5150000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 12.872143884967285,
+      "ms": 2.0,
+      "time_s": 1.5150000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 12.97560572515425,
+      "ms": 4.0,
+      "time_s": 1.5150000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 13.136559004250188,
+      "ms": 0.5,
+      "time_s": 1.78
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 7.602092352467849,
+      "ms": 2.0,
+      "time_s": 1.78
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 6.483900583819549,
+      "ms": 4.0,
+      "time_s": 1.78
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 23.906142628316864,
+      "ms": 0.5,
+      "time_s": 2.045
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.075160354550848,
+      "ms": 2.0,
+      "time_s": 2.045
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 11.64155769039036,
+      "ms": 4.0,
+      "time_s": 2.045
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 2.31
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.780576833634111,
+      "ms": 2.0,
+      "time_s": 2.31
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.718517259035387,
+      "ms": 4.0,
+      "time_s": 2.31
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 2.575
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 2.575
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 2.575
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.08973375673127,
+      "ms": 0.5,
+      "time_s": 2.8400000000000003
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 2.8400000000000003
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 2.8400000000000003
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.205319769812316,
+      "ms": 0.5,
+      "time_s": 3.105
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 3.105
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 3.105
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 3.37
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 3.37
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 3.37
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 21.68976473143577,
+      "ms": 0.5,
+      "time_s": 3.6350000000000002
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.396850869535616,
+      "ms": 2.0,
+      "time_s": 3.6350000000000002
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 7.809801193160527,
+      "ms": 4.0,
+      "time_s": 3.6350000000000002
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 17.16299984398581,
+      "ms": 0.5,
+      "time_s": 3.9
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.713136434926218,
+      "ms": 2.0,
+      "time_s": 3.9
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 3.9
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.717047751674375,
+      "ms": 0.5,
+      "time_s": 4.165
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 5.538787736517751,
+      "ms": 2.0,
+      "time_s": 4.165
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 4.165
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 18.1063722397692,
+      "ms": 0.5,
+      "time_s": 4.430000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 4.430000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 4.430000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 16.77057008237077,
+      "ms": 0.5,
+      "time_s": 4.695
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 4.695
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.031131110679636,
+      "ms": 4.0,
+      "time_s": 4.695
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 20.150983891744172,
+      "ms": 0.5,
+      "time_s": 4.960000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 7.211677461976258,
+      "ms": 2.0,
+      "time_s": 4.960000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 7.515221381037842,
+      "ms": 4.0,
+      "time_s": 4.960000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 16.867108187484607,
+      "ms": 0.5,
+      "time_s": 5.2250000000000005
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 5.2250000000000005
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 5.2250000000000005
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 4.227023933927588,
+      "ms": 0.5,
+      "time_s": 5.490000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 4.5475086099275055,
+      "ms": 2.0,
+      "time_s": 5.490000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 5.490000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 5.755000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 5.755000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 5.755000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 6.0200000000000005
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 6.0200000000000005
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "the sides disagree in level or are quiet",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 6.0200000000000005
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.413494849377596,
+      "ms": 0.5,
+      "time_s": 6.285000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 6.901747667400024,
+      "ms": 2.0,
+      "time_s": 6.285000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 6.285000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.87516153046736,
+      "ms": 0.5,
+      "time_s": 6.550000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.253214293139594,
+      "ms": 2.0,
+      "time_s": 6.550000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 6.916903580623818,
+      "ms": 4.0,
+      "time_s": 6.550000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 0.5,
+      "time_s": 6.815
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 8.488934600028248,
+      "ms": 2.0,
+      "time_s": 6.815
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 6.815
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 10.396852992391764,
+      "ms": 0.5,
+      "time_s": 7.080000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 7.080000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 7.080000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 6.015448471987397,
+      "ms": 0.5,
+      "time_s": 7.345000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 5.108195245791408,
+      "ms": 2.0,
+      "time_s": 7.345000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 7.345000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 13.83884632017942,
+      "ms": 0.5,
+      "time_s": 7.61
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 7.61
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 7.61
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.864670627423443,
+      "ms": 0.5,
+      "time_s": 7.875000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 6.760952233234942,
+      "ms": 2.0,
+      "time_s": 7.875000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 6.395073717401649,
+      "ms": 4.0,
+      "time_s": 7.875000000000001
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 11.995555096988259,
+      "ms": 0.5,
+      "time_s": 8.14
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 8.514952522816785,
+      "ms": 2.0,
+      "time_s": 8.14
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 9.095279115954213,
+      "ms": 4.0,
+      "time_s": 8.14
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 9.373845244234161,
+      "ms": 0.5,
+      "time_s": 8.405
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 8.405
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 8.405
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 15.144007014296976,
+      "ms": 0.5,
+      "time_s": 8.67
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 1.6998917550594295,
+      "ms": 2.0,
+      "time_s": 8.67
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 8.67
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 9.699783053382543,
+      "ms": 0.5,
+      "time_s": 8.935
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 8.935
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 8.935
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 23.30890085198171,
+      "ms": 0.5,
+      "time_s": 9.2
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 9.2
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 9.2
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "filled",
+      "error_reduction_db": 23.288083489481117,
+      "ms": 0.5,
+      "time_s": 9.465
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 2.0,
+      "time_s": 9.465
+    },
+    {
+      "case": "stress stereo vocal",
+      "channels": 2,
+      "decision": "adjacent patches are not predictable",
+      "error_reduction_db": 0.0,
+      "ms": 4.0,
+      "time_s": 9.465
+    }
+  ],
+  "sources_unchanged": true,
+  "synthetic_rng": "Rust uniform, not NumPy Gaussian stream",
+  "total": 242,
+  "vocals_sha256": "8950e840231c235b0cc3a32172c683463b334a0e175c547fd0bc4582fb1f3f16",
+  "worse_accepted": 0
+}

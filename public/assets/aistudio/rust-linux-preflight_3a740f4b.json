@@ -1,0 +1,29 @@
+{
+  "advisories_requested": false,
+  "audio_quality": "not assessed",
+  "checks": [
+    {
+      "command": [
+        "check",
+        "--locked",
+        "--offline",
+        "--lib",
+        "--no-default-features",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "exit": 0,
+      "status": "passed",
+      "stderr": "   Compiling autocfg v1.5.1\n   Compiling proc-macro2 v1.0.107\n   Compiling unicode-ident v1.0.27\n   Compiling quote v1.0.47\n   Compiling serde_core v1.0.228\n   Compiling zmij v1.0.23\n    Checking strength_reduce v0.2.4\n   Compiling serde v1.0.228\n   Compiling serde_json v1.0.150\n    Checking memchr v2.8.3\n    Checking itoa v1.0.19\n    Checking hound v3.5.1\n   Compiling num-traits v0.2.19\n   Compiling syn v2.0.119\n    Checking num-integer v0.1.47\n    Checking num-complex v0.4.6\n    Checking transpose v0.2.3\n    Checking primal-check v0.3.4\n    Checking rustfft v6.4.1\n   Compiling serde_derive v1.0.228\n    Checking spectral-canvas-mono v0.1.0 (/workspace/scratch/7e8e50e9d14f/spectral-canvas-recovery/audit-preview5)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.58s\n",
+      "stdout": ""
+    }
+  ],
+  "manifest": {
+    "default_features": null,
+    "mobile_builds_verified": false,
+    "unconditionally_linked_shell_dependencies": []
+  },
+  "native_device_smoke": "not run by this script",
+  "passed": true,
+  "platform": "linux"
+}

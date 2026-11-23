@@ -1,0 +1,9 @@
+{
+  "figures": [
+    "evidence/capture-rust/virtual/rms-comparison.svg",
+    "evidence/capture-rust/metal/rms-comparison.svg",
+    "evidence/capture-rust/metal/spectral-tail.svg",
+    "evidence/capture-rust/panels/rms-comparison.svg"
+  ],
+  "response_data": "panels/response.csv"
+}

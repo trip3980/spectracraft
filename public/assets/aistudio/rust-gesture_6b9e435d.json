@@ -1,0 +1,24 @@
+{
+  "common_gain": 1.0,
+  "entrances": [
+    {
+      "added_breath_relative_to_local_baseline_db": -15.905711202522255,
+      "entrance_seconds": 0.5630839002267574,
+      "generated_breath_carrier_rms_change_db": 4.538343105887357,
+      "peak_local_gain_command_db": 6.2421306149620515
+    },
+    {
+      "added_breath_relative_to_local_baseline_db": -31.1587801514916,
+      "entrance_seconds": 3.4626757369614514,
+      "generated_breath_carrier_rms_change_db": 4.203517252012375,
+      "peak_local_gain_command_db": 6.167236829168358
+    }
+  ],
+  "full_excerpt_rms_delta_db": 0.00041291131502436257,
+  "listening_verdict": "not assessed",
+  "max_timing_delta_ms": 1.9954648526077108,
+  "passed": true,
+  "same_outside_gesture": true,
+  "second_take_start_sec": 6.67530612244898,
+  "source_unchanged": true
+}

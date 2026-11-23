@@ -1,0 +1,42 @@
+# Rust / Cargo build outputs
+# Note: Cargo.lock IS tracked intentionally at the workspace root because
+# SpectraCraft builds executable binaries (spectracraft-mono, spectracraft-qa,
+# spectracraft-desktop) and uses --locked builds for reproducibility.
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local audio media, session exports & scratch verification artifacts
+*.wav
+*.flac
+*.aiff
+*.mp3
+*.spectracraft.json
+ui-screens/
+evidence/
+
+# Logs, environment files & secrets
+*.log
+.env
+.env.*
+!.env.example
+
+# Local web/preview harness artifacts (keep out of Rust repository commits)
+node_modules/
+dist/
+build/
+coverage/
+bun.lock

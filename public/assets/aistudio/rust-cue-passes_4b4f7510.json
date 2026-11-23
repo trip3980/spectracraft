@@ -1,0 +1,60 @@
+{
+  "channel_mode": "explicit stereo mean",
+  "clip_s": [
+    40,
+    50
+  ],
+  "listening_peak_safety_gain": 1.0,
+  "piles": {
+    "anchors": {
+      "difference_if_omitted_db_relative_to_full": -1.6440221865389362,
+      "share_of_band_energy_pct": [
+        79.71286896770074,
+        34.989111664178445,
+        12.056510203353815,
+        0.0
+      ],
+      "spectral_energy_pct": 76.97207609015987
+    },
+    "faint": {
+      "difference_if_omitted_db_relative_to_full": -23.04606305530044,
+      "share_of_band_energy_pct": [
+        0.2840506694855784,
+        8.285949547906403,
+        14.991447794694334,
+        15.424928813693816
+      ],
+      "spectral_energy_pct": 0.8157349827142772
+    },
+    "supported": {
+      "difference_if_omitted_db_relative_to_full": -14.866942555573477,
+      "share_of_band_energy_pct": [
+        6.155275412205372,
+        3.4515707641329385,
+        1.2276819890170647,
+        0.0
+      ],
+      "spectral_energy_pct": 5.973825365110778
+    },
+    "unresolved": {
+      "difference_if_omitted_db_relative_to_full": -10.178020428511793,
+      "share_of_band_energy_pct": [
+        13.847804950609166,
+        53.27336802378125,
+        71.72436001293268,
+        84.57507118630464
+      ],
+      "spectral_energy_pct": 16.238363562017586
+    }
+  },
+  "rms_adjustment_db": {
+    "all-cues": 0.0,
+    "anchors-only": 1.6440221865389355,
+    "without-faint": 0.04924876591670683,
+    "without-supported": 0.3714486646577835,
+    "without-unresolved": 1.2024801419840856
+  },
+  "sample_rate": 48000,
+  "shared_phase_exact_ablations": true,
+  "source_unchanged": true
+}

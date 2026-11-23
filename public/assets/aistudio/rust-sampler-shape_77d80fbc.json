@@ -1,0 +1,278 @@
+[
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      0.11422713849995852,
+      -46.76917837998523,
+      -41.47130157663013,
+      -242.75941904546085
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 1,
+      "rebuilt_peak_share_delta_db": -0.02563628048685831,
+      "rebuilt_pre_db": -16.20593313430888,
+      "ref_onset_ms": 72,
+      "ref_peak_hz": 129.19921875,
+      "reference_pre_db": -18.948437562756208
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "decentsampler-bottles-main/Bottles/Samples/L_RR1_60_C3.wav",
+    "source_sample_rate": 44100,
+    "tentative_ring_tracks": 4
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      0.11422713849995852,
+      -46.76917837998523,
+      -41.47130157663013,
+      -242.75941904546085
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 1,
+      "rebuilt_peak_share_delta_db": -0.02563628048685831,
+      "rebuilt_pre_db": -16.20593313430888,
+      "ref_onset_ms": 72,
+      "ref_peak_hz": 129.19921875,
+      "reference_pre_db": -18.948437562756208
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "decentsampler-bottles-main/Bottles/Samples/L_RR1_60_C3.wav",
+    "source_sample_rate": 44100,
+    "tentative_ring_tracks": 4
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.00011109423580218941,
+      -47.142449405405465,
+      -40.758425910194305,
+      -242.6148374153992
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": -5,
+      "rebuilt_peak_share_delta_db": 0.0004814566278121694,
+      "rebuilt_pre_db": -14.498442846045352,
+      "ref_onset_ms": 79,
+      "ref_peak_hz": 193.798828125,
+      "reference_pre_db": -21.134560225910064
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "decentsampler-bottles-main/Bottles/Samples/L_RR1_67_G3.wav",
+    "source_sample_rate": 44100,
+    "tentative_ring_tracks": 3
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.00011109423580218941,
+      -47.142449405405465,
+      -40.758425910194305,
+      -242.6148374153992
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": -5,
+      "rebuilt_peak_share_delta_db": 0.0004814566278121694,
+      "rebuilt_pre_db": -14.498442846045352,
+      "ref_onset_ms": 79,
+      "ref_peak_hz": 193.798828125,
+      "reference_pre_db": -21.134560225910064
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "decentsampler-bottles-main/Bottles/Samples/L_RR1_67_G3.wav",
+    "source_sample_rate": 44100,
+    "tentative_ring_tracks": 3
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.3196268859864259,
+      -240.71395675977882,
+      -10.746936200292525,
+      -240.71395675977882
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": -1,
+      "rebuilt_peak_share_delta_db": -0.04266805597675134,
+      "rebuilt_pre_db": -22.079062767803542,
+      "ref_onset_ms": 4,
+      "ref_peak_hz": 386.71875,
+      "reference_pre_db": -24.47105839255009
+    },
+    "mode": "shape",
+    "render_rate": 96000,
+    "source": "SIMPK_01_HurdyGurdy/assets/wav/67_G4_00_00.wav",
+    "source_sample_rate": 96000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.34460153896288365,
+      -237.33565450026165,
+      -10.727287600348355,
+      -237.33565450026165
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 0,
+      "rebuilt_peak_share_delta_db": -0.003990195704248587,
+      "rebuilt_pre_db": -26.11092494381966,
+      "ref_onset_ms": 2,
+      "ref_peak_hz": 387.59765625,
+      "reference_pre_db": -31.103719080594374
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "SIMPK_01_HurdyGurdy/assets/wav/67_G4_00_00.wav",
+    "source_sample_rate": 96000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.08038757261016213,
+      -239.3192894514024,
+      -16.21311012673266,
+      -239.3192894514024
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 0,
+      "rebuilt_peak_share_delta_db": -0.030770048447456406,
+      "rebuilt_pre_db": -197.2149542688545,
+      "ref_onset_ms": 0,
+      "ref_peak_hz": 1042.96875,
+      "reference_pre_db": -197.34999467001504
+    },
+    "mode": "shape",
+    "render_rate": 96000,
+    "source": "SIMPK_01_HurdyGurdy/assets/wav/72_C5_00_00.wav",
+    "source_sample_rate": 96000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.11136765489298439,
+      -235.9409236776602,
+      -16.02386721633801,
+      -235.9409236776602
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 0,
+      "rebuilt_peak_share_delta_db": 0.06256118432299983,
+      "rebuilt_pre_db": -196.8760479802572,
+      "ref_onset_ms": 0,
+      "ref_peak_hz": 1044.3603515625,
+      "reference_pre_db": -197.3542562089816
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "SIMPK_01_HurdyGurdy/assets/wav/72_C5_00_00.wav",
+    "source_sample_rate": 96000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      0.002797451252640963,
+      -241.1723506664026,
+      -33.347445506033694,
+      -241.1723506664026
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": -1,
+      "rebuilt_peak_share_delta_db": -0.00047878096236721136,
+      "rebuilt_pre_db": -20.43585393813295,
+      "ref_onset_ms": 1,
+      "ref_peak_hz": 421.875,
+      "reference_pre_db": -23.730396512115647
+    },
+    "mode": "shape",
+    "render_rate": 48000,
+    "source": "SIMPK_05_Glasharmonica/assets/wav/69_A4_00_00.wav",
+    "source_sample_rate": 48000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      0.004707220436366153,
+      -240.8043510971075,
+      -33.495654713145015,
+      -240.8043510971075
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": -1,
+      "rebuilt_peak_share_delta_db": -0.000179608283515712,
+      "rebuilt_pre_db": -19.647208934749564,
+      "ref_onset_ms": 1,
+      "ref_peak_hz": 425.28076171875,
+      "reference_pre_db": -23.724789506715798
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "SIMPK_05_Glasharmonica/assets/wav/69_A4_00_00.wav",
+    "source_sample_rate": 48000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      -0.006761315075685461,
+      -237.33993282245936,
+      -30.43952228967882,
+      -237.33993282245936
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 0,
+      "rebuilt_peak_share_delta_db": 0.0033924872695795865,
+      "rebuilt_pre_db": -198.64988591027642,
+      "ref_onset_ms": 0,
+      "ref_peak_hz": 503.90625,
+      "reference_pre_db": -198.76800239337933
+    },
+    "mode": "shape",
+    "render_rate": 48000,
+    "source": "SIMPK_05_Glasharmonica/assets/wav/72_C5_00_00.wav",
+    "source_sample_rate": 48000,
+    "tentative_ring_tracks": 0
+  },
+  {
+    "breath_accent_events": 0,
+    "exact_ablations": true,
+    "layer_rms_db_relative_to_reference": [
+      0.005437495447545125,
+      -236.9719324858325,
+      -30.56851940882607,
+      -236.9719324858325
+    ],
+    "metrics": {
+      "rebuilt_onset_delta_ms": 0,
+      "rebuilt_peak_share_delta_db": 0.000584889407610762,
+      "rebuilt_pre_db": -198.4378291067004,
+      "ref_onset_ms": 0,
+      "ref_peak_hz": 506.0302734375,
+      "reference_pre_db": -198.76445345019494
+    },
+    "mode": "shape",
+    "render_rate": 44100,
+    "source": "SIMPK_05_Glasharmonica/assets/wav/72_C5_00_00.wav",
+    "source_sample_rate": 48000,
+    "tentative_ring_tracks": 0
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "name": "Spectral Canvas",
+  "description": "Rust-backed acoustic performance analysis, source-free dry guitar synthesis, editable layers, and capture variant workstation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

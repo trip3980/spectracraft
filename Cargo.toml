@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "spectracraft-mono",
+    "spectracraft-mono/vendor/craft-atomic",
+]
+default-members = [
+    "spectracraft-mono",
+]
+
+[workspace.package]
+repository = "https://github.com/storytold/spectracraft"
+homepage = "https://github.com/storytold/spectracraft"
+rust-version = "1.89"

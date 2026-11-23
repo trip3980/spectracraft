@@ -1,0 +1,350 @@
+{
+  "active_source_files": 33,
+  "active_source_rust_only": true,
+  "policy": "This audit never deletes; documented owner removals retain baseline hashes; partial and pending sources must remain",
+  "retired_script_count": 38,
+  "scripts": [
+    {
+      "deletion_performed": false,
+      "path": "bench/work/boundaries.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Three original restoration ranges replayed; source and non-pitch cues unchanged",
+      "replacement": "src/reperform.rs boundary_evidence/restore_subharmonic_ranges; spectral-qa guitar-boundaries",
+      "sha256": "e41dd4c6503fdc483b13c35f6bf21b54e329abbeee98ade9de6c5686c15c58ce",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "bench/work/model.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "48 archived events and exact boundaries/accents; maximum pitch rounding difference 0.001 Hz; native analyzer remains separate",
+      "replacement": "src/reperform.rs analyze_guitar_legacy; spectral-qa guitar-legacy",
+      "sha256": "c0e58f9f50354c58835ce1ba65ace32a122b3651fc51bd88736c912acf0b511d",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "bench/work/patch_boundaries.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Five original patches exactly match archived pitches; atomic invalid-patch rejection",
+      "replacement": "src/reperform.rs patch_boundaries; tests/boundaries.rs; spectral-qa guitar-boundaries",
+      "sha256": "bf0b3843dbe27a318143ea2382ed8278bcd3150a15744b731b2bee248808f464",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/acoustic_calibration.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Owner removed retired file; original baseline hash retained",
+      "replacement": "src/qa.rs impulse/electrical-response tests",
+      "sha256": "40073a0754707fd3d19cf5c6e1f4382bf86ef0dee803c70fc588438c6d940e0c",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/cue-passes/passes.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Four exclusive piles and shared 40-iteration phase field; real vocal run and harmonic control; SVG presentation differs",
+      "replacement": "src/cue_passes.rs; spectral-qa cue-passes",
+      "sha256": "dc832006cef70d5cccaf2f9d418982cf64904826c25483898ad9d334e2159950",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/engineering_checks.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Owner removed retired file; original baseline hash retained",
+      "replacement": "spectral-qa engineering; src/qa.rs",
+      "sha256": "eabcbb179c30c2a10195c64e24d5ab0ea3fa3e320bb326bccbc8cf04dca61246",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/fixtures/make_six_note.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Owner removed retired file; original baseline hash retained",
+      "replacement": "spectral-qa six-note; fixture PCM parity",
+      "sha256": "8e6b8c60397367bd7fecee60901cf2b8b303276c1b14ae1d3239944b07ab32bf",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/decent/masked_holdout.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Five beds, two onset times, three levels and clean controls; separate detection/render/off-target and exact energy reports",
+      "replacement": "spectral-qa masked-holdout; src/bench.rs",
+      "sha256": "4256ba8f476dfc02d78ce30c523a1d99ee0a0b4168a907c13df4a25fe800997f",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/decent/round2.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Eight mapped native-rate clips plus separate woodblock; guard-off/on, peak and pre-onset metrics",
+      "replacement": "spectral-qa round2; src/bench.rs",
+      "sha256": "89b1088b1a38108bc35e8ac834bad3e0580948367d35a25d896754138e184a08",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/decent/round3.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Eight prior plus eight held-out clips; all 48 shaped renders pass original gates",
+      "replacement": "spectral-qa round3; src/metrics.rs frozen_score",
+      "sha256": "445ab2a6212cd44a04e0e23f3e00a35f29cb2cf52ee23cf02b418966c8f9943c",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/decent/round3_independent.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Four preset-verified independent voices, 12 passing renders; no external decoder",
+      "replacement": "spectral-qa independent; claxon native FLAC",
+      "sha256": "8c0b183a124262f030e968c9c413e188a133e86c6f1f6f8e71b0f3baa65cd8c7",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/decent/run.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Preset-verified ZIP/XML, native/44.1 kHz, stem ablations/metrics/WAV exports; bounded native sinc resampler",
+      "replacement": "spectral-qa sampler-run; src/bench.rs; six-samples",
+      "sha256": "74e99461d03f23ff70bd4d713e12c6e169835ec76e77286b821c876babc5d163",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/decent/verify_round3.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Strict schema and thresholds for 60 current renders plus six native regressions",
+      "replacement": "spectral-qa verify-corpus; src/metrics.rs",
+      "sha256": "9318fb207ab78731bfedfc3f1059ede4ac5489e2319fd4d0243f4f0dc4ec60d4",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/instrument-bench/smoke.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Three Iowa excerpts with active tonal coverage, pitch, layer energy and peaks",
+      "replacement": "spectral-qa smoke; src/bench.rs",
+      "sha256": "624361c1e7d9202d157993789fbde023c17ee099cd10c34827a20821a2727bc6",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/local-gap/probe.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Dense regularized solver replaces banded implementation; synthetic noise stream differs; all fixed corpus gates retained",
+      "replacement": "src/gap.rs; spectral-qa gap-corpus",
+      "sha256": "048b853622a5fe70e8a856c749c5025268fdff03a3139c8c18b4105cfea9456b",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/local-gap/repair_wav.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Owner removed retired file; original baseline hash retained; explicit 600 s bound",
+      "replacement": "src/gap.rs repair_wav; tests/gap_cli.rs",
+      "sha256": "217fc95034fe7c8dff3c3a981bb64b4ed40a40969bb33149bc784c667ec29651",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/local-gap/stress.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Owner removed retired file; fixed original stress grids retained",
+      "replacement": "spectral-qa gap-corpus",
+      "sha256": "7c2afaf8d3326ab739d652341ec2c28a36b2a1259bc0ba1275a6ec88f17f5f63",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/local-gap/verify.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Independent Householder QR on augmented design; source/format/outside/no-overwrite checks",
+      "replacement": "src/gap.rs independent_oracle; tests/gap_cli.rs; spectral-qa gap-corpus",
+      "sha256": "6eb3dd91c75b450751b36cf8907fb04c8980f8b936e0e84e236a1d5076337708",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/metal-demo/metal.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Full 1.5 s lattice and loudness-matched tail exports; idealized wall model",
+      "replacement": "src/room_bench.rs metal_ir; capture-experiments/capture-figures",
+      "sha256": "ba51b1745bde278a12a93a2e23e754f97b596042112d1df9935dd94e057833fc",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/parameter-demo/demo.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "1025-tap measured-curve FIR; equal geometric delays; SVG and CSV response; idealized absorption interpretation",
+      "replacement": "src/room_bench.rs panel_ir; spectral-qa response-figure",
+      "sha256": "632e89d3d04f78789c73bb298b1b8ec860a2d81c2804867f49e3b63467c5f586",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/compare_accent_spectrogram.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Five shared-scale SVG panels and audio-difference window gate; SVG replaces PNG",
+      "replacement": "src/figures.rs accent; spectral-qa accent-figure",
+      "sha256": "81f6ba293d0bfba712f7f98a41c7e790ad592b9747a7bba0f5ed3e1e5602c689",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/cutoff.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Eight frozen cuts and three seeds; prefix-only fit, known decay accuracy and sustain-decline controls",
+      "replacement": "src/continuation.rs; spectral-qa flute-cutoffs",
+      "sha256": "c19b3971203a5de56170c4c04c7740b28db339faeeff63e5673e39830d1dfaa6",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/edge_rebuild.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Quiet resonance/adaptive entry/chirp/faint options; strict three-seed flute gates pass",
+      "replacement": "src/edge.rs; spectral-qa flute-layers/verify-flute",
+      "sha256": "fd03fe559ecb3a5740aee5d6ff4be8a19e0e1059004ef01d11d0daccc04cc701",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/faint_ridges.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Crossing/non-bridge/no-target controls and real flute contrast pass",
+      "replacement": "src/edge.rs faint_tracks; tests/faint_ridges.rs",
+      "sha256": "0f71a54c35796615c7244f323e5ecddc05a46d27995d0e02b7e5ea676855d2ea",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/gesture_accent.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Two gestures, local carrier report, timing/RMS gates and quantized A/B outside equality",
+      "replacement": "src/workspace.rs breath_control/render; spectral-qa gesture",
+      "sha256": "4cf51c70fbe79af09adbfd19a6e1f7e2ab83a57f6e802d9020ce341baba12e7f",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/layer_workspace.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Four native stems, fixed audition headroom, view/mute/solo/gain/reset/seek, packet save/load; native app replaces HTML",
+      "replacement": "src/workspace.rs; native desktop layer panel; analyze-layers/render-layers CLI",
+      "sha256": "f38b495fae6932bbc8005c57e65aa6ad92eefd538d1946b0f28c2f6065b4e2ce",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/masked_band_pass.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Raw-band/whitened variants; f64 exact texture-energy debit; fresh noise stream differs; detection remains experimental",
+      "replacement": "src/masked.rs; masked::tests; spectral-qa masked-holdout",
+      "sha256": "5101a2a41dfa4b107e636079da5a7a013fb3aead9aa7a157b22a7ebdda2b0eef",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/rebuild.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "General FFT rounded up to power of two; original flute profile and compatible uniform phase stream; numerical gates pass",
+      "replacement": "src/harmonic.rs; src/metrics.rs; tests/sample_rates.rs; spectral-qa flute-layers",
+      "sha256": "fbc9a0c29b6487bb18ff3ea035a9a16976543032c1d8f187ab3c1b88c259e5e5",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/trace.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Welch summaries of reference/mix/pitch/ring/texture for five fixed spans",
+      "replacement": "src/metrics.rs peaks; spectral-qa flute-trace",
+      "sha256": "83db787d3408054c9d0904838d3d323cde50e83361615a7585f86c4300d9b499",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/verify_attack_guard.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Four-rate guards, source-free packet roundtrip and layer isolation",
+      "replacement": "tests/attack_rates.rs; src/layers.rs",
+      "sha256": "86d4e48d4cd8a8b249753431bb969ed6bc6cf044e9d8d0d23b4fcafe1d596be9",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/verify_edge.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Strict original three-seed tail/held-note/timing gates; evidence/rust-flute-verification.json",
+      "replacement": "spectral-qa flute-layers/verify-flute; src/metrics.rs",
+      "sha256": "6e93e12c66c486156e77716d6db228405553dbf91900a6b3cc67103ce9c84e78",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/verify_faint_ridges.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Three synthetic crossings plus real-flute >3 dB contrast, timing and exact last-tail checks",
+      "replacement": "tests/faint_ridges.rs; spectral-qa flute-faint",
+      "sha256": "75b269b901912688eb3b58d7f8f02d5bb6e915875beafb6fe875cd9129cdf7be",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/verify_layer_workspace.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Narrow/wide UI and packet import/export/isolation tested; physical device playback unverified because /dev/snd is absent",
+      "replacement": "desktop layer_tests; tests/cli.rs; workspace tests",
+      "sha256": "8269b61f43e14deb2a5b3e36e70477c92e051599aa38f6269062af4acd6aa21c",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/performance-rebuild/verify_sample_rates.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Five-rate pitch/noise/silence and six native/44.1 kHz real regressions",
+      "replacement": "tests/sample_rates.rs; spectral-qa six-samples/verify-corpus",
+      "sha256": "22c0faf3778fb904980b15967f9609fb6a814c567453798b3111b41a3acea28b",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/plot_virtual_capture.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Standalone SVG replaces PNG; common 10 ms RMS scales and tail zoom",
+      "replacement": "src/figures.rs rms_plot; spectral-qa capture-figures",
+      "sha256": "43f9fadf490a99faf79a4cc1589a44ff15ac4fd8eade1bdc579d4e16d7ab3737",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/reference-match/match.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "145 candidates selected only by training score; held-out scores and four sensitivity changes; no hardware identification",
+      "replacement": "src/room_bench.rs reference_match/reference_figures",
+      "sha256": "79ecbb3f15f7f6c9b3452f9ef4befbded4467610b80738fbfc08172cf9a2f8a9",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/release-readiness/preflight.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Platform target matrix and host/advisory options implemented; only Linux core/desktop verified; device, non-Linux and advisory checks remain unverified",
+      "replacement": "src/preflight.rs; spectral-qa preflight",
+      "sha256": "2ff9bbe268bd1ecf40acd14172f245d705e939c30bc79ce17a3faa8907c2e18a",
+      "status": "replaced"
+    },
+    {
+      "deletion_performed": false,
+      "path": "project/virtual_capture.py",
+      "presence": "intentionally removed by owner; baseline hash retained",
+      "remaining": "Native ebur128 loudness/true-peak; fresh Gaussian stream differs from NumPy; matched gate passes",
+      "replacement": "src/room_bench.rs capture_experiments/meter; spectral-qa capture-experiments",
+      "sha256": "bdffe06c67c4c04e9c2833c94a9f7df179e6b5f748272a3db613bdafdcad5b34",
+      "status": "replaced"
+    }
+  ]
+}

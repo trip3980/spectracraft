@@ -1,0 +1,111 @@
+   Compiling spectral-canvas-mono v0.1.0 (/workspace/shared/spectral-canvas-final.hwc1XK/spectral-canvas-rust-handoff)
+    Finished `release` profile [optimized] target(s) in 42.02s
+     Running unittests src/lib.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/spectral_canvas_mono-4df08a3dde04ab4a)
+
+running 28 tests
+test attack_guard::tests::quiet_entry_is_shaped_without_touching_full_note ... ok
+test capture::tests::catalog_surfaces_size_and_signed_capsule_are_independent ... ok
+test capture::tests::stereo_cues_do_not_replace_left_channel ... ok
+test gap::tests::malformed_ranges_decline_without_panicking ... ok
+test attack_guard::tests::two_attacks_guard_pre_echo_without_modifying_entrance ... ok
+test gap::tests::two_boundary_solution_satisfies_normal_equations ... ok
+test gap::independent_oracle::cholesky_patch_matches_independent_householder_least_squares ... ok
+test preflight::tests::matrix_distinguishes_host_and_core_targets ... ok
+test qa::tests::electrical_response_matches_analytic_control ... ok
+test dsp::reference_rng_tests::upstream_pcg64_vector ... ok
+test digest::tests::standard_vectors ... ok
+test qa::tests::planted_pre_echo_is_gain_invariant ... ok
+test qa::tests::stereo_and_silence_have_explicit_undefined_metrics ... ok
+test capture::tests::virtual_mic_and_room_change_paths_not_direct_timing ... ok
+test metrics::tests::fixed_gates_detect_timing_and_tonal_mismatch ... ok
+test string_state::tests::bend_rotates_old_energy_and_repick_adds_without_reset ... ok
+test continuation::tests::damped_modes_are_fitted_from_prefix_and_sustain_is_declined ... ok
+test qa::tests::known_ir_level_and_delay_are_independent ... ok
+test tests::silence_stays_silent_and_malformed_inputs_fail ... ok
+test workspace::tests::controls_and_region_edits_cannot_touch_other_layers_or_reference ... ok
+test tests::independent_tone_matches_level_and_varies_with_synthesis_seed ... ok
+test masked::tests::energy_debit_and_outside_preservation ... ok
+test tests::texture_model_adds_seeded_sound_and_keeps_silence ... ok
+test room_bench::tests::fir_and_loudness_controls ... ok
+test tests::quieter_evidenced_partial_continues_without_birthing_or_bridging_silence ... ok
+test qa::tests::fixture_matches_original_recipe_and_silence_bounds ... ok
+test gap::tests::stereo_repair_preserves_outside_and_improves_missing_tones ... ok
+test cue_passes::tests::harmonic_control_and_exclusive_shared_phase ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s
+
+     Running unittests src/main.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/spectral_canvas_mono-4d4932bad8c7ce1e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/spectral-qa.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/spectral_qa-37a041679d0f069f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attack_rates.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/attack_rates-021b5a7f09ab3b86)
+
+running 2 tests
+test quiet_attacks_work_at_native_rates_without_changing_the_strike ... ok
+test attack_packet_roundtrip_renders_all_layers_without_source_pcm ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/boundaries.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/boundaries-6518d9ee16ded67f)
+
+running 2 tests
+test unsupported_or_cross_event_patch_is_rejected ... ok
+test supported_pitch_patch_preserves_every_other_cue_and_is_atomic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/capture_tail.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/capture_tail-8db0bde95306b2fd)
+
+running 1 test
+test capture_tail_extends_export_and_preserves_the_existing_prefix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/cli-54ccfc3ac35f3562)
+
+running 2 tests
+test renders_export_without_source_at_render_time ... ok
+test editable_layers_render_from_packet_and_reject_overwrite ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/faint_ridges.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/faint_ridges-25c2a5e5c16cff8f)
+
+running 1 test
+test crossing_ridges_are_evidenced_without_bridging_or_false_lines ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.88s
+
+     Running tests/gap_cli.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/gap_cli-fc8ceea439c834eb)
+
+running 1 test
+test cli_is_nondestructive_and_declines_intact_audio ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/reperform.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/reperform-241abc3aa201f007)
+
+running 4 tests
+test invalid_mode_is_rejected ... ok
+test editable_repick_changes_only_the_expected_part_of_the_track ... ok
+test source_analysis_and_render_are_native ... ok
+test local_harmonic_shaping_preserves_rest_and_later_note ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/sample_rates.rs (/workspace/shared/sc-rust-toolchain/handoff-validation-target/release/deps/sample_rates-6909281c2dfaea56)
+
+running 2 tests
+test invalid_analysis_inputs_fail_and_silent_packet_is_strict_json ... ok
+test original_sample_rate_pitch_noise_and_silence_gates ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.25s
+
