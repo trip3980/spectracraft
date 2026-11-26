@@ -347,6 +347,35 @@ export function validateGapRepairRange(
   return { ok: true, startFrame, endFrame, repairedFrames, contextFrames };
 }
 
+/**
+ * Picks a guaranteed-valid default Local Gap Repair start time (in seconds) with >= 48 ms
+ * leading and trailing context for the loaded session duration and optional time selection.
+ */
+export function defaultGapRepairStartS(
+  durationS: number,
+  selection?: [number, number] | null,
+  gapMs = 2.0,
+): number {
+  if (!Number.isFinite(durationS) || durationS <= 0) {
+    return 0.1;
+  }
+  const safeGapS = Math.max(
+    0.00025,
+    Math.min(0.004, Number.isFinite(gapMs) ? gapMs / 1000 : 0.002),
+  );
+  const marginS = 0.06; // slightly wider than the 48 ms Rust guard for safe rounding
+  if (durationS <= marginS * 2 + safeGapS) {
+    return Number(Math.max(0, (durationS - safeGapS) / 2).toFixed(3));
+  }
+  const maxStart = durationS - safeGapS - marginS;
+  const preferred =
+    selection && Number.isFinite(selection[0])
+      ? selection[0]
+      : Math.min(12, durationS * 0.4);
+  const clamped = Math.max(marginS, Math.min(maxStart, preferred));
+  return Number(clamped.toFixed(3));
+}
+
 export function countUncertainOverlaps(
   noteStart: number,
   noteEnd: number,
@@ -364,10 +393,15 @@ export function countUncertainOverlaps(
 export function computeEffectiveLayerGains(
   channels: readonly Pick<LayerChannel, 'id' | 'gain' | 'muted' | 'solo'>[],
   headroomGain = 0.707,
+  includeTexture = true,
 ): Record<string, number> {
   const anySolo = channels.some((c) => c.solo);
   const out: Record<string, number> = {};
   for (const ch of channels) {
+    if (!includeTexture && ch.id === 'texture') {
+      out[ch.id] = 0;
+      continue;
+    }
     const active = anySolo ? ch.solo && !ch.muted : !ch.muted;
     const clamped = Math.max(0, Math.min(2.0, Number.isFinite(ch.gain) ? ch.gain : 1));
     out[ch.id] = active ? clamped * headroomGain : 0;
@@ -378,11 +412,6 @@ export function computeEffectiveLayerGains(
 export function formatDbfs(value: number): string {
   if (!Number.isFinite(value)) return '—';
   return `${value.toFixed(2)} dBFS`;
-}
-
-export function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0.000 s';
-  return `${seconds.toFixed(3)} s`;
 }
 
 export function formatHz(hz: number | null | undefined): string {
@@ -517,4 +546,139 @@ export function sliceMonoWavBuffer(
     startS: startFrame / sampleRate,
     endS: endFrame / sampleRate,
   };
+}
+
+export type WavHeaderCheck =
+  | {
+      ok: true;
+      sampleRate: number;
+      bitsPerSample: number;
+      audioFormat: number;
+      samples: number;
+      durationS: number;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Validate mono RIFF/WAVE header bytes before writing an upload to disk or invoking Rust CLI.
+ */
+export function validateMonoWavHeader(
+  source: Uint8Array,
+  maxDurationS = 90.5,
+): WavHeaderCheck {
+  if (source.byteLength < 44) {
+    return {
+      ok: false,
+      error: 'Upload a valid mono RIFF/WAVE file (8–96 kHz, up to 90 seconds).',
+    };
+  }
+  const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+  const tag = (off: number) =>
+    String.fromCharCode(source[off], source[off + 1], source[off + 2], source[off + 3]);
+
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') {
+    return {
+      ok: false,
+      error: 'Upload a valid mono RIFF/WAVE file (8–96 kHz, up to 90 seconds).',
+    };
+  }
+
+  let foundFmt = false;
+  let audioFormat = 0;
+  let channels = 0;
+  let sampleRate = 0;
+  let bitsPerSample = 0;
+  let dataSize = -1;
+
+  let offset = 12;
+  let chunks = 0;
+  while (offset + 8 <= source.byteLength && chunks < 128) {
+    chunks += 1;
+    const id = tag(offset);
+    const size = view.getUint32(offset + 4, true);
+    const body = offset + 8;
+    if (body + size > source.byteLength) {
+      return { ok: false, error: 'WAV file appears truncated or has an invalid chunk length.' };
+    }
+    if (id === 'fmt ') {
+      if (size < 16) {
+        return { ok: false, error: 'Invalid WAV format chunk.' };
+      }
+      foundFmt = true;
+      const rawFmt = view.getUint16(body, true);
+      channels = view.getUint16(body + 2, true);
+      sampleRate = view.getUint32(body + 4, true);
+      bitsPerSample = view.getUint16(body + 14, true);
+      if (rawFmt === 0xfffe && size >= 40) {
+        audioFormat = view.getUint16(body + 24, true);
+      } else {
+        audioFormat = rawFmt;
+      }
+    } else if (id === 'data') {
+      dataSize = size;
+      break;
+    }
+    offset = body + size + (size % 2);
+  }
+
+  if (!foundFmt || dataSize <= 0) {
+    return { ok: false, error: 'WAV file is missing a valid format or audio data chunk.' };
+  }
+  if (channels !== 1) {
+    return { ok: false, error: 'SpectraCraft requires a single-source mono (1-channel) WAV file.' };
+  }
+  if (sampleRate < 8000 || sampleRate > 96000) {
+    return { ok: false, error: 'WAV sample rate must be between 8 kHz and 96 kHz.' };
+  }
+  const supportedFormat =
+    (audioFormat === 3 && bitsPerSample === 32) ||
+    (audioFormat === 1 && (bitsPerSample === 8 || bitsPerSample === 16 || bitsPerSample === 24 || bitsPerSample === 32));
+  if (!supportedFormat) {
+    return {
+      ok: false,
+      error: 'Unsupported WAV encoding (expected PCM 8/16/24/32-bit or 32-bit IEEE float).',
+    };
+  }
+  const bytesPerSample = bitsPerSample / 8;
+  const samples = Math.floor(dataSize / bytesPerSample);
+  if (samples <= 0) {
+    return { ok: false, error: 'WAV file contains zero audio frames.' };
+  }
+  const durationS = samples / sampleRate;
+  if (durationS > maxDurationS) {
+    return { ok: false, error: 'WAV clip exceeds the 90-second single-source upload limit.' };
+  }
+  return { ok: true, sampleRate, bitsPerSample, audioFormat, samples, durationS };
+}
+
+/**
+ * Redact internal filesystem paths and stack trace lines before returning an error message to clients.
+ */
+export function sanitizeClientErrorMessage(
+  raw: string,
+  sensitiveRoots: readonly string[] = [],
+  fallback = 'Request failed.',
+): string {
+  const lines = raw
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^at\s+/.test(line));
+  let msg = lines[0] ?? '';
+  if (!msg) return fallback;
+
+  for (const root of sensitiveRoots) {
+    if (root && root.length > 1) {
+      msg = msg.split(root).join('<path>');
+    }
+  }
+  msg = msg
+    .replace(/\/(?:tmp|var|home|Users|root|app|opt|etc|usr|private)\/[^\s'"`),;:]+/g, '<path>')
+    .replace(/[A-Za-z]:\\[^\s'"`),;:]+/g, '<path>')
+    .replace(/Command failed:\s*[^\n]+/i, 'Audio engine command failed.')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!msg) return fallback;
+  return msg.length > 240 ? `${msg.slice(0, 237)}...` : msg;
 }

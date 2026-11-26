@@ -2,13 +2,17 @@
 name = "spectracraft-mono"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.89"
+rust-version.workspace = true
 default-run = "spectracraft-mono"
 repository.workspace = true
-homepage.workspace = true
 
 [dependencies]
-craft-atomic = { path = "vendor/craft-atomic" }
+# Pinned Git dependencies from storytold/craft-libs (never track a floating branch).
+# Upstream has no semver Git tags yet; pinned to explicit commit rev.
+# When a release tag (e.g. v0.1.0) is published, switch `rev = "..."` to `tag = "v0.1.0"`.
+craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "05b99ee5dcd64f2c954a693ef361301214ddc3c7" }
+craft-pdf = { git = "https://github.com/storytold/craft-libs", rev = "05b99ee5dcd64f2c954a693ef361301214ddc3c7", default-features = false }
+craft-settings = { git = "https://github.com/storytold/craft-libs", rev = "05b99ee5dcd64f2c954a693ef361301214ddc3c7" }
 zip = { version = "=2.4.2", default-features = false, features = ["deflate"], optional = true }
 quick-xml = { version = "=0.41.0", optional = true }
 claxon = { version = "=0.4.3", optional = true }

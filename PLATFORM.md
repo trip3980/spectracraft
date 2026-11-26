@@ -17,7 +17,7 @@ All five audio stages and their supporting math/catalog modules use only Rust `s
 | Stage 2 — Surgical Region Editing (dry only) | `region_edit.rs` | None (pure Rust slice math & crossfades) |
 | Stage 3 — Optional Microphone | `capture.rs`, `studio_catalog.rs`, `acoustic_math.rs` | None (pure math; optional `SPECTRAL_SOURCE_CATALOG_PATH` env var via `std::path::Path`) |
 | Stage 4 — Optional Space / Room | `capture.rs`, `studio_catalog.rs`, `acoustic_math.rs` | None (pure image-source & 6-band FIR math) |
-| Stage 5 — Optional Plugin Slot & Atomic Saves | `pipeline.rs`, `vendor/craft-atomic/` | DSP is pure Rust; `craft-atomic` encapsulates Linux/Unix (`fsync`/`rename`), macOS (`F_FULLFSYNC` via `rustix`), and Windows (retry backoff for sharing/lock violations) |
+| Stage 5 — Optional Plugin Slot & Atomic Saves | `pipeline.rs`, `report_export.rs` (`craft-atomic`) | DSP is pure Rust; `craft-atomic` (pinned `storytold/craft-libs`) encapsulates Linux/Unix (`fsync`/`rename`), macOS (`F_FULLFSYNC` via `rustix`), and Windows (retry backoff for sharing/lock violations) |
 | Portable Paths & Host Metadata | `platform.rs` (non-feature section) | `std::env::temp_dir()`, OS-appropriate home/app-data paths, quote/tilde path normalization, macOS vs Ctrl shortcut labels |
 
 ### Desktop-Only Surface (`--features desktop`)
@@ -86,21 +86,46 @@ See [`.github/workflows/desktop-ci.yml`](./.github/workflows/desktop-ci.yml) for
 
 ---
 
-## 3. Future Mobile Targets (iOS & Android — Deferred)
+## 3. Tauri 2 Cross-Platform Shell (Linux, macOS, Windows, iOS & Android)
 
-Mobile support is intentionally deferred. The audio engine does **not** need to be rewritten when mobile work starts because `spectracraft-mono` already builds as a standalone library with `--no-default-features` (`eframe`, `rfd`, and `rodio` are optional under `--features desktop`, enforced by `src/preflight.rs`).
+Alongside the native Rust `egui`/`eframe` desktop binary (`spectracraft-desktop`), SpectraCraft now includes a thin **Tauri 2** shell under `src-tauri/` that packages the React + Vite workstation UI directly on top of the unchanged `spectracraft-mono` core crate (`default-features = false`, zero Electron):
 
-What will be required later for mobile:
+- **`src-tauri/Cargo.toml`**: Standalone workspace (`exclude = ["src-tauri"]` in root `Cargo.toml` so offline `--locked` core builds remain untouched) declaring `crate-type = ["staticlib", "cdylib", "rlib"]` for desktop + iOS + Android linking.
+- **`src-tauri/src/lib.rs`**: Uses `#[cfg_attr(mobile, tauri::mobile_entry_point)]` and exposes thin IPC commands (`platform_info`, `supported_daw_targets`, `get_settings`, `update_settings`, `reset_settings_defaults`, `export_daw_interchange`) directly backed by `spectracraft-mono`.
+- **`src-tauri/tauri.conf.json`**: Configures desktop bundles (`deb`, `appimage`, `dmg`/`app`, `msi`/`nsis`) plus mobile minimums (`iOS.minimumSystemVersion = "15.0"`, `android.minSdkVersion = 26`).
 
-1. **Core Library Packaging**:
-   - Compile `spectracraft-mono` with `--no-default-features` as a `staticlib` (iOS: `aarch64-apple-ios`, `aarch64-apple-ios-sim`) and `cdylib` (Android: `aarch64-linux-android`, `x86_64-linux-android`) behind a thin C/UniFFI or Swift/Kotlin bridge exposing the 5-stage pipeline commands and audio buffers.
-2. **Mobile Audio Device Layer** (replaces desktop `platform::AudioPlayback`):
-   - **iOS**: `AVAudioSession` category/route/interruption management + CoreAudio / `AVAudioEngine` playback callback.
-   - **Android**: `Oboe` / `AAudio` (supported by `cpal` when built with the Android NDK or via a thin native audio callback) + audio focus handling.
-3. **Mobile File Access** (replaces desktop `platform::dialogs`):
-   - **iOS**: `UIDocumentPickerViewController` with security-scoped URLs and bookmark/copy-into-sandbox handling.
-   - **Android**: Storage Access Framework (`ACTION_OPEN_DOCUMENT` / `ACTION_CREATE_DOCUMENT`) streaming through content `Uri` file descriptors rather than raw filesystem paths.
-4. **Mobile UI & Lifecycle** (replaces desktop `eframe` windowing):
-   - Touch-first UI shell (SwiftUI/UIKit on iOS, Jetpack Compose on Android, or mobile `winit`/`egui` with software keyboard & safe-area insets), plus OS background/suspension state persistence and tighter memory budgets for long recordings.
-5. **Signing & Distribution**:
-   - Apple App Store / TestFlight provisioning + hardened runtime, and Android APK/AAB signing.
+### Desktop Tauri 2 Targets
+
+```bash
+# Linux x64
+cargo tauri build --target x86_64-unknown-linux-gnu
+
+# Windows x64
+cargo tauri build --target x86_64-pc-windows-msvc
+
+# macOS arm64 / x64 / Universal
+cargo tauri build --target aarch64-apple-darwin
+cargo tauri build --target x86_64-apple-darwin
+cargo tauri build --target universal-apple-darwin
+```
+
+### Mobile Tauri 2 Targets (iOS & Android)
+
+Mobile scaffolds (`src-tauri/gen/apple` and `src-tauri/gen/android`) are generated on demand and intentionally git-ignored so signing certificates, Apple Team IDs, and Android keystores never enter version control:
+
+```bash
+# iOS (macOS + Xcode 15+ required)
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+cargo tauri ios init
+cargo tauri ios build
+
+# Android (Android SDK API 26+ + NDK + JDK 17 required)
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+cargo tauri android init
+cargo tauri android build
+```
+
+Remaining mobile production items before App Store / Play Store distribution:
+1. **Signing & Provisioning**: Configure Apple Developer Team ID / provisioning profiles for iOS and a release keystore for Android.
+2. **Native Mobile File Pickers & Audio Session**: Wire `UIDocumentPickerViewController` (iOS) / Storage Access Framework (Android) and `AVAudioSession` / Oboe focus handling when shipping on-device audio capture.
+

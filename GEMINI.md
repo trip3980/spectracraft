@@ -7,11 +7,15 @@ This repository hosts **SpectraCraft** (`spectracraft-mono/`), a native Rust des
 1. **Architecture & Invariants**: `/SPECTRACRAFT_SPEC.md` is authoritative. Never replace the native Rust workstation with a browser substitute and never alter the five-stage pipeline order:
    `Stage 1: Dry Regeneration -> Stage 2: Surgical Region Editing (dry only) -> Stage 3: Optional Microphone -> Stage 4: Optional Space/Room -> Stage 5: Optional Plugin Slot`.
 2. **Working Rules**: Follow `/SPECTRACRAFT_BIBLE.md` (including Section 00 Ponytail rules: minimal clean edits, preserve invariants, never cut validation or audio/state tests, end changes with one line stating what was skipped or left unchecked).
+3. **Rust-First Engine Rule** (`/SPECTRACRAFT_BIBLE.md` Section 01): Prefer Rust (`spectracraft-mono/` and Rust engine crates) unless the task is explicitly UI-only; keep TypeScript strictly a thin viewer/control surface; never move engine logic, Stage 1 persistent-state physics, additive re-pick, continuous bend, DSP, or blind reporting into TypeScript; break ties in favor of Rust to keep the codebase Rust-majority (~30% TS, ~3% JS); always name the Rust files/modules changed.
+4. **Standing Security & Robustness Checklist** (`/SPECTRACRAFT_BIBLE.md` Section 09 & `.agents/skills/security-robustness-check/SKILL.md`): Run the Critical / High / Medium security and robustness checklist on any security, robustness, or pre-export audit and whenever new file-handling, upload, IPC, or export code is added. Prefer Rust for engine/IPC fixes, never alter Stage 1 physics or blind reporting, and mark checks requiring a local Rust toolchain as pending when running in a sandbox.
 
 ## Installed Agent Skills (`.agents/skills/`)
 
 Project-local skills are installed in copy mode via `skills.sh` and pinned in `skills-lock.json` for **Gemini CLI** and **Antigravity**:
 
+- **SpectraCraft standing skill** (repository-local):
+  `security-robustness-check` (`.agents/skills/security-robustness-check/SKILL.md`)
 - **obra/superpowers** (MIT License — `https://github.com/obra/superpowers`):
   `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `requesting-code-review`, `subagent-driven-development`
 - **trailofbits/skills** (CC BY-SA 4.0 License — `https://github.com/trailofbits/skills`):

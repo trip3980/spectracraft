@@ -69,37 +69,28 @@ pub fn impulse(h: &[f32], rate: u32) -> Result<ImpulseMetrics> {
 pub fn read_audio(path: &Path) -> Result<(hound::WavSpec, Vec<f32>)> {
     let mut w = hound::WavReader::open(path)?;
     let s = w.spec();
-    if !(1..=2).contains(&s.channels)
-        || !(8000..=96000).contains(&s.sample_rate)
-        || w.duration() > s.sample_rate * 600
-    {
-        return Err("Expected mono/stereo 8–96 kHz, at most 600 seconds".into());
-    }
-    let x = match s.sample_format {
-        hound::SampleFormat::Float => w
-            .samples::<f32>()
-            .collect::<std::result::Result<Vec<_>, _>>()?,
-        hound::SampleFormat::Int => {
-            let scale = 2_f32.powi(s.bits_per_sample as i32 - 1);
-            w.samples::<i32>()
-                .map(|v| v.map(|v| v as f32 / scale))
-                .collect::<std::result::Result<Vec<_>, _>>()?
+    let initial_cap = crate::validate_wav_spec(s, w.duration(), 600, true)?;
+    let mut x = Vec::with_capacity(initial_cap.saturating_mul(s.channels as usize));
+    match s.sample_format {
+        hound::SampleFormat::Float => {
+            for sample in w.samples::<f32>() {
+                x.push(sample?);
+            }
         }
-    };
+        hound::SampleFormat::Int => {
+            let scale = 2_f32.powi(i32::from(s.bits_per_sample) - 1);
+            for sample in w.samples::<i32>() {
+                x.push(sample? as f32 / scale);
+            }
+        }
+    }
     if x.is_empty() || x.len() % s.channels as usize != 0 || x.iter().any(|v| !v.is_finite()) {
         return Err("Invalid audio samples".into());
     }
     Ok((s, x))
 }
 pub fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
-    let mut w = std::io::BufWriter::new(f);
-    w.write_all(bytes)?;
-    w.flush()?;
-    Ok(())
+    crate::report_export::atomic_write_new_bytes(path, bytes)
 }
 pub fn six_note() -> (Vec<i16>, serde_json::Value) {
     let fs = 48000;
@@ -815,23 +806,8 @@ pub fn cue_passes(input: &Path, out: &Path) -> Result<serde_json::Value> {
     .min(1.);
     std::fs::create_dir(out)?;
     for (name, y) in waves {
-        let f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(out.join(format!("{name}.wav")))?;
-        let mut w = hound::WavWriter::new(
-            f,
-            hound::WavSpec {
-                channels: 1,
-                sample_rate: 48000,
-                bits_per_sample: 32,
-                sample_format: hound::SampleFormat::Float,
-            },
-        )?;
-        for v in y {
-            w.write_sample((v * headroom) as f32)?;
-        }
-        w.finalize()?;
+        let scaled: Vec<f32> = y.into_iter().map(|v| (v * headroom) as f32).collect();
+        write_float_wav_unscaled(48000, &scaled, &out.join(format!("{name}.wav")))?;
     }
     write_new(
         &out.join("analysis.json"),
@@ -952,28 +928,14 @@ pub fn gesture(input: &Path, out: &Path) -> Result<serde_json::Value> {
             .map(|v| v.abs())
             .fold(0., f32::max))
     .min(1.);
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(out)?;
-    let mut w = hound::WavWriter::new(
-        f,
-        hound::WavSpec {
-            channels: 1,
-            sample_rate: 44100,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        },
-    )?;
-    for v in normal
+    let pcm_i16: Vec<i16> = normal
         .iter()
         .copied()
         .chain(std::iter::repeat_n(0., 37485))
         .chain(accent.iter().copied())
-    {
-        w.write_sample((v * common * 32767.).round_ties_even() as i16)?;
-    }
-    w.finalize()?;
+        .map(|v| (v * common * 32767.).round_ties_even() as i16)
+        .collect();
+    write_wav_new_i16(44100, &pcm_i16, out)?;
     let (_, pcm) = read_audio(out)?;
     if (0..x.len())
         .filter(|&i| crate::dsp::interp(&control, i as f64 / 128.) == 0.)
@@ -1053,28 +1015,47 @@ pub fn faint_export(input: &Path, out: &Path) -> Result<serde_json::Value> {
     Ok(report)
 }
 
+pub fn write_wav_new_i16(rate: u32, samples: &[i16], path: &Path) -> Result<()> {
+    let mut buf = Vec::with_capacity(samples.len() * 2 + 64);
+    {
+        let mut w = hound::WavWriter::new(
+            std::io::Cursor::new(&mut buf),
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: rate,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )?;
+        for &s in samples {
+            w.write_sample(s)?;
+        }
+        w.finalize()?;
+    }
+    write_new(path, &buf)
+}
+
 fn write_float_wav_unscaled(rate: u32, samples: &[f32], path: &Path) -> Result<()> {
     if samples.is_empty() || samples.iter().any(|v| !v.is_finite()) {
         return Err("Invalid float WAV samples".into());
     }
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
-    let mut w = hound::WavWriter::new(
-        std::io::BufWriter::new(f),
-        hound::WavSpec {
-            channels: 1,
-            sample_rate: rate,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
-        },
-    )?;
-    for &s in samples {
-        w.write_sample(s)?;
+    let mut buf = Vec::with_capacity(samples.len() * 4 + 64);
+    {
+        let mut w = hound::WavWriter::new(
+            std::io::Cursor::new(&mut buf),
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: rate,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            },
+        )?;
+        for &s in samples {
+            w.write_sample(s)?;
+        }
+        w.finalize()?;
     }
-    w.finalize()?;
-    Ok(())
+    write_new(path, &buf)
 }
 
 fn signal_stats(samples: &[f32]) -> (f64, Option<f64>, Option<f64>) {

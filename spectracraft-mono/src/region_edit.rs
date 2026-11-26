@@ -112,34 +112,22 @@ fn resolve_effective_action(action: RegionFixAction, note: &str) -> Option<Regio
 }
 
 /// Filter a time-domain edit delta so only frequencies inside `[flo, fhi]` are retained,
-/// with a smooth raised-cosine edge taper to avoid brickwall ringing.
+/// using 75%-overlap Hann STFT overlap-add masking for long regions (preventing temporal
+/// pre-echo) and a smooth raised-cosine spectral taper to avoid brickwall ringing.
 fn bandpass_delta_fft(delta: &[f64], rate: f64, flo: f64, fhi: f64) -> Vec<f64> {
     let n = delta.len();
     if n == 0 {
         return Vec::new();
     }
-    let fft_len = (n * 2).next_power_of_two().max(64);
-    let mut planner = FftPlanner::<f64>::new();
-    let fft = planner.plan_fft_forward(fft_len);
-    let ifft = planner.plan_fft_inverse(fft_len);
-
-    let mut spectrum = vec![Complex::new(0.0_f64, 0.0_f64); fft_len];
-    for (i, &v) in delta.iter().enumerate() {
-        spectrum[i].re = v;
-    }
-    fft.process(&mut spectrum);
 
     let nyquist = rate * 0.5;
     let lo = flo.clamp(0.0, nyquist);
     let hi = fhi.clamp(lo, nyquist);
     let bw = (hi - lo).max(1.0);
     let taper = (bw * 0.10).clamp(15.0, 200.0).min(bw * 0.45);
-    let bin_hz = rate / fft_len as f64;
 
-    for (k, bin) in spectrum.iter_mut().enumerate() {
-        let sym_k = if k <= fft_len / 2 { k } else { fft_len - k };
-        let f = sym_k as f64 * bin_hz;
-        let g = if f < lo - taper || f > hi + taper {
+    let bin_gain = |f: f64| -> f64 {
+        if f < lo - taper || f > hi + taper {
             0.0
         } else if f < lo && taper > 0.0 {
             let t = (f - (lo - taper)) / taper;
@@ -149,13 +137,93 @@ fn bandpass_delta_fft(delta: &[f64], rate: f64, flo: f64, fhi: f64) -> Vec<f64> 
             0.5 * (1.0 - (PI * t).cos())
         } else {
             1.0
-        };
-        *bin *= g;
+        }
+    };
+
+    // Short selections use a single zero-padded FFT so spectral resolution stays tight.
+    if n < 1024 {
+        let fft_len = (n * 2).next_power_of_two().max(64);
+        let mut planner = FftPlanner::<f64>::new();
+        let fft = planner.plan_fft_forward(fft_len);
+        let ifft = planner.plan_fft_inverse(fft_len);
+        let mut spectrum = vec![Complex::new(0.0_f64, 0.0_f64); fft_len];
+        for (i, &v) in delta.iter().enumerate() {
+            spectrum[i].re = v;
+        }
+        fft.process(&mut spectrum);
+        let bin_hz = rate / fft_len as f64;
+        for (k, bin) in spectrum.iter_mut().enumerate() {
+            let sym_k = if k <= fft_len / 2 { k } else { fft_len - k };
+            *bin *= bin_gain(sym_k as f64 * bin_hz);
+        }
+        ifft.process(&mut spectrum);
+        let inv_len = 1.0 / fft_len as f64;
+        return spectrum
+            .into_iter()
+            .take(n)
+            .map(|c| c.re * inv_len)
+            .collect();
     }
 
-    ifft.process(&mut spectrum);
-    let inv_len = 1.0 / fft_len as f64;
-    spectrum.into_iter().take(n).map(|c| c.re * inv_len).collect()
+    // Long selections use 75%-overlap Hann STFT overlap-add (window=1024, hop=256)
+    // to eliminate long-range temporal pre-echo across multi-second regions.
+    let win_len = 1024_usize;
+    let hop = win_len / 4;
+    let fft_len = win_len * 2; // 2x zero-padding prevents circular convolution wrap-around
+    let mut planner = FftPlanner::<f64>::new();
+    let fft = planner.plan_fft_forward(fft_len);
+    let ifft = planner.plan_fft_inverse(fft_len);
+    let inv_fft = 1.0 / fft_len as f64;
+    let bin_hz = rate / fft_len as f64;
+
+    let win: Vec<f64> = (0..win_len)
+        .map(|i| 0.5 * (1.0 - (2.0 * PI * i as f64 / win_len as f64).cos()))
+        .collect();
+    let mask: Vec<f64> = (0..fft_len)
+        .map(|k| {
+            let sym_k = if k <= fft_len / 2 { k } else { fft_len - k };
+            bin_gain(sym_k as f64 * bin_hz)
+        })
+        .collect();
+
+    let mut out = vec![0.0_f64; n];
+    let mut norm = vec![0.0_f64; n];
+    let mut buf = vec![Complex::new(0.0_f64, 0.0_f64); fft_len];
+
+    let mut start_i = -(win_len as isize) + hop as isize;
+    while start_i < n as isize {
+        for c in &mut buf {
+            *c = Complex::new(0.0, 0.0);
+        }
+        for i in 0..win_len {
+            let idx = start_i + i as isize;
+            if idx >= 0 && (idx as usize) < n {
+                buf[i].re = delta[idx as usize] * win[i];
+            }
+        }
+        fft.process(&mut buf);
+        for (c, &g) in buf.iter_mut().zip(mask.iter()) {
+            *c *= g;
+        }
+        ifft.process(&mut buf);
+        for i in 0..win_len {
+            let idx = start_i + i as isize;
+            if idx >= 0 && (idx as usize) < n {
+                let u = idx as usize;
+                let w = win[i];
+                out[u] += buf[i].re * inv_fft * w;
+                norm[u] += w * w;
+            }
+        }
+        start_i += hop as isize;
+    }
+
+    for i in 0..n {
+        if norm[i] > 1e-12 {
+            out[i] /= norm[i];
+        }
+    }
+    out
 }
 
 /// Apply a localized DDSP-style fix to ONLY the shape inside `edit`'s bounds and splice it
@@ -303,15 +371,17 @@ pub fn apply_dry_region_edit(
                     let prev = orig_lvl[k.saturating_sub(1)];
                     let next = orig_lvl[(k + 1).min(n_frames - 1)];
                     let avg_lvl = (prev + orig_lvl[k] + next) / 3.0;
-                    note.level_steps[k] =
-                        orig_lvl[k] + (avg_lvl - orig_lvl[k]) * (0.7 * strength);
+                    note.level_steps[k] = orig_lvl[k] + (avg_lvl - orig_lvl[k]) * (0.7 * strength);
                 }
                 RegionFixAction::ReduceNoise | RegionFixAction::NoteOnly => {}
             }
         }
 
         // For Smooth or ReduceNoise, gently tame upper harmonics on affected notes
-        if matches!(eff_action, RegionFixAction::Smooth | RegionFixAction::ReduceNoise) {
+        if matches!(
+            eff_action,
+            RegionFixAction::Smooth | RegionFixAction::ReduceNoise
+        ) {
             for h in 5..=14 {
                 let cur = note.shape.mode_weights.get(&h).copied().unwrap_or(1.0);
                 let factor = (1.0 - 0.28 * strength).clamp(0.45, 1.0);
@@ -450,6 +520,7 @@ mod tests {
             hop_s,
             notes: vec![
                 Note {
+                    string_id: None,
                     re_picks: None,
                     start: 0.10,
                     end: 0.60,
@@ -459,6 +530,7 @@ mod tests {
                     shape: Shape::default(),
                 },
                 Note {
+                    string_id: None,
                     re_picks: None,
                     start: 1.10,
                     end: 1.60,
@@ -490,9 +562,18 @@ mod tests {
         };
 
         let out = apply_dry_region_edit(&cached_dry, &perf, cello, &base_voicing, &edit).unwrap();
-        assert!(out.outside_bit_identical, "samples outside region MUST be bit-identical");
-        assert_eq!(out.affected_notes, 1, "only Note 0 intersects the marked region");
-        assert_ne!(out.before_slice, out.after_slice, "region edit must update audio inside bounds");
+        assert!(
+            out.outside_bit_identical,
+            "samples outside region MUST be bit-identical"
+        );
+        assert_eq!(
+            out.affected_notes, 1,
+            "only Note 0 intersects the marked region"
+        );
+        assert_ne!(
+            out.before_slice, out.after_slice,
+            "region edit must update audio inside bounds"
+        );
         // Verify Note 1 (1.10..1.60 s) is 100% untouched bit-for-bit
         let n1_a = (1.10 * rate as f64) as usize;
         let n1_b = (1.60 * rate as f64) as usize;
@@ -511,6 +592,7 @@ mod tests {
             samples: rate as usize,
             hop_s: 0.005,
             notes: vec![Note {
+                string_id: None,
                 re_picks: None,
                 start: 0.10,
                 end: 0.50,
@@ -576,7 +658,13 @@ mod tests {
 
         let in_band = goertzel_amp(&filtered, 1200.0);
         let out_band = goertzel_amp(&filtered, 220.0);
-        assert!(in_band > 0.9, "in-band delta energy should be preserved, got {in_band}");
-        assert!(out_band < 0.02, "out-of-band delta energy should be suppressed, got {out_band}");
+        assert!(
+            in_band > 0.9,
+            "in-band delta energy should be preserved, got {in_band}"
+        );
+        assert!(
+            out_band < 0.02,
+            "out-of-band delta energy should be suppressed, got {out_band}"
+        );
     }
 }

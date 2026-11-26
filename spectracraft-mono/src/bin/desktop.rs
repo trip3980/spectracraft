@@ -18,8 +18,12 @@ use spectracraft_mono::studio_catalog::{
 use spectracraft_mono::{analyze_with_texture, synthesize, write_wav};
 use spectracraft_mono::{edge, workspace};
 use std::{
+    borrow::Cow,
     path::{Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc,
+    },
     time::Duration,
 };
 
@@ -334,6 +338,28 @@ struct Track {
     guitar_cues: Option<reperform::Performance>,
 }
 
+fn aligned_excerpt_slice(
+    span_start: usize,
+    excerpt: &[f32],
+    s0: usize,
+    s1: usize,
+) -> Cow<'_, [f32]> {
+    if s1 <= s0 {
+        return Cow::Borrowed(&[]);
+    }
+    let span_end = span_start.saturating_add(excerpt.len());
+    if s0 >= span_start && s1 <= span_end {
+        return Cow::Borrowed(&excerpt[s0 - span_start..s1 - span_start]);
+    }
+    let mut out = vec![0.0_f32; s1 - s0];
+    let ov0 = s0.max(span_start);
+    let ov1 = s1.min(span_end);
+    if ov1 > ov0 {
+        out[ov0 - s0..ov1 - s0].copy_from_slice(&excerpt[ov0 - span_start..ov1 - span_start]);
+    }
+    Cow::Owned(out)
+}
+
 impl Track {
     fn duration(&self) -> f64 {
         self.original.len() as f64 / self.rate as f64
@@ -342,39 +368,54 @@ impl Track {
         self.rebuilt_span
             .map(|[a, b]| [a as f64 / self.rate as f64, b as f64 / self.rate as f64])
     }
-    /// Full-track-aligned regenerated buffer (zeros outside `rebuilt_span`), for aligned A/B & Difference.
-    fn aligned_rebuilt(&self) -> Option<Vec<f32>> {
+    /// Viewport/playback-bounded aligned regenerated slice (zero full-track padded copy).
+    fn aligned_rebuilt_slice(&self, s0: usize, s1: usize) -> Option<Cow<'_, [f32]>> {
         let rebuilt = self.rebuilt.as_deref()?;
-        let [start, end] = self.rebuilt_span.unwrap_or([0, rebuilt.len()]);
-        if start == 0 && end == self.original.len() && rebuilt.len() == self.original.len() {
-            return Some(rebuilt.to_vec());
-        }
-        let mut full = vec![0.0_f32; self.original.len()];
-        let copy_len = rebuilt.len().min(self.original.len().saturating_sub(start));
-        full[start..start + copy_len].copy_from_slice(&rebuilt[..copy_len]);
-        Some(full)
-    }
-    /// Sample-aligned actual difference: `rebuilt[i] - original[i]` on `rebuilt_span`, 0 outside.
-    fn aligned_difference(&self) -> Option<Vec<f32>> {
-        let rebuilt = self.rebuilt.as_deref()?;
+        let (s0, s1) = platform::clamp_playback_slice(self.original.len(), s0, Some(s1));
         let [start, _] = self.rebuilt_span.unwrap_or([0, rebuilt.len()]);
-        let mut diff = vec![0.0_f32; self.original.len()];
-        let copy_len = rebuilt.len().min(self.original.len().saturating_sub(start));
-        for i in 0..copy_len {
-            diff[start + i] = rebuilt[i] - self.original[start + i];
+        Some(aligned_excerpt_slice(start, rebuilt, s0, s1))
+    }
+    /// Viewport/playback-bounded sample-aligned difference: `rebuilt[i] - original[i]` on `rebuilt_span`, 0 outside.
+    fn aligned_difference_slice(&self, s0: usize, s1: usize) -> Option<Vec<f32>> {
+        let rebuilt = self.rebuilt.as_deref()?;
+        let (s0, s1) = platform::clamp_playback_slice(self.original.len(), s0, Some(s1));
+        let [start, _] = self.rebuilt_span.unwrap_or([0, rebuilt.len()]);
+        let span_end = start.saturating_add(rebuilt.len()).min(self.original.len());
+        let mut diff = vec![0.0_f32; s1 - s0];
+        let ov0 = s0.max(start);
+        let ov1 = s1.min(span_end);
+        for i in ov0..ov1 {
+            diff[i - s0] = rebuilt[i - start] - self.original[i];
         }
         Some(diff)
+    }
+    #[cfg(test)]
+    fn aligned_difference(&self) -> Option<Vec<f32>> {
+        self.aligned_difference_slice(0, self.original.len())
     }
     #[cfg(test)]
     fn audition(&self, which: Take) -> Option<Vec<f32>> {
         self.audition_with_options(which, true, PreviewBitDepth::Float32)
     }
+    #[cfg(test)]
     fn audition_with_options(
         &self,
         which: Take,
         rms_match: bool,
         bit_depth: PreviewBitDepth,
     ) -> Option<Vec<f32>> {
+        self.audition_slice_with_options(which, rms_match, bit_depth, 0, None)
+    }
+    fn audition_slice_with_options(
+        &self,
+        which: Take,
+        rms_match: bool,
+        bit_depth: PreviewBitDepth,
+        start_sample: usize,
+        end_sample: Option<usize>,
+    ) -> Option<Vec<f32>> {
+        let (slice_start, slice_end) =
+            platform::clamp_playback_slice(self.original.len(), start_sample, end_sample);
         let quant = |mut v: Vec<f32>| {
             if bit_depth != PreviewBitDepth::Float32 {
                 for s in &mut v {
@@ -384,22 +425,32 @@ impl Track {
             v
         };
         if let Some(layers) = &self.layers {
-            let samples = match which {
-                Take::Original => self.original.to_vec(),
-                Take::Regenerated => self.aligned_rebuilt()?,
-                Take::Difference => self.aligned_difference()?,
+            let samples: Vec<f32> = match which {
+                Take::Original => self.original[slice_start..slice_end]
+                    .iter()
+                    .map(|&v| v * layers.headroom)
+                    .collect(),
+                Take::Regenerated => self
+                    .aligned_rebuilt_slice(slice_start, slice_end)?
+                    .iter()
+                    .map(|&v| v * layers.headroom)
+                    .collect(),
+                Take::Difference => self
+                    .aligned_difference_slice(slice_start, slice_end)?
+                    .into_iter()
+                    .map(|v| v * layers.headroom)
+                    .collect(),
             };
-            return Some(quant(
-                samples.into_iter().map(|v| v * layers.headroom).collect(),
-            ));
+            return Some(quant(samples));
         }
         let Some(other_excerpt) = self.rebuilt.as_deref() else {
             return (which == Take::Original).then(|| {
                 let peak = self.original.iter().fold(0_f32, |p, x| p.max(x.abs()));
+                let scale = 0.89 / peak.max(0.89);
                 quant(
-                    self.original
+                    self.original[slice_start..slice_end]
                         .iter()
-                        .map(|x| x * (0.89 / peak.max(0.89)))
+                        .map(|&x| x * scale)
                         .collect(),
                 )
             });
@@ -426,21 +477,26 @@ impl Track {
                 .max(peak(&self.original))
                 .max(peak(other_excerpt) * gain);
         let out: Vec<f32> = match which {
-            Take::Original => self.original.iter().map(|&v| v * master).collect(),
+            Take::Original => self.original[slice_start..slice_end]
+                .iter()
+                .map(|&v| v * master)
+                .collect(),
             Take::Regenerated => self
-                .aligned_rebuilt()?
-                .into_iter()
-                .map(|v| v * master * gain)
+                .aligned_rebuilt_slice(slice_start, slice_end)?
+                .iter()
+                .map(|&v| v * master * gain)
                 .collect(),
             Take::Difference => {
                 // Difference between level-matched regenerated and original on active span
-                let mut diff = vec![0.0_f32; self.original.len()];
-                let copy_len = other_excerpt
-                    .len()
-                    .min(self.original.len().saturating_sub(s0));
-                for i in 0..copy_len {
-                    diff[s0 + i] =
-                        other_excerpt[i] * master * gain - self.original[s0 + i] * master;
+                let mut diff = vec![0.0_f32; slice_end - slice_start];
+                let span_end = s0
+                    .saturating_add(other_excerpt.len())
+                    .min(self.original.len());
+                let ov0 = slice_start.max(s0);
+                let ov1 = slice_end.min(span_end);
+                for i in ov0..ov1 {
+                    diff[i - slice_start] =
+                        other_excerpt[i - s0] * master * gain - self.original[i] * master;
                 }
                 diff
             }
@@ -455,7 +511,11 @@ enum Finished {
     Render(Result<([usize; 2], Vec<f32>), String>),
     GuitarDry(Result<([usize; 2], reperform::Performance, Vec<f32>), String>),
     DryResynth(Result<([usize; 2], Vec<f32>), String>),
-    Capture(PostDryPipelineConfig, [usize; 2], pipeline::PipelineRenderOutput),
+    Capture(
+        PostDryPipelineConfig,
+        [usize; 2],
+        pipeline::PipelineRenderOutput,
+    ),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -514,20 +574,20 @@ enum SelectionDragMode {
 /// (neutral charcoal surfaces, Spectrum Blue focus, emerald active stage, high-contrast ink).
 struct StudioTheme;
 impl StudioTheme {
-    const BG_WINDOW: Color32 = Color32::from_rgb(22, 22, 26);      // #16161a canvas chrome
-    const BG_HEADER: Color32 = Color32::from_rgb(28, 28, 33);      // #1c1c21 panel header strips
-    const BG_PANEL: Color32 = Color32::from_rgb(31, 31, 36);       // #1f1f24 docked panels
-    const BG_SURFACE: Color32 = Color32::from_rgb(38, 38, 44);     // #26262c section cards
-    const BG_CANVAS: Color32 = Color32::from_rgb(18, 18, 22);      // #121216 plots & spatial plans
-    const BG_WIDGET: Color32 = Color32::from_rgb(46, 46, 54);      // #2e2e36 flat buttons/inputs
-    const BG_HOVER: Color32 = Color32::from_rgb(58, 58, 69);       // #3a3a45 hover state
-    const ACCENT_BLUE: Color32 = Color32::from_rgb(55, 142, 240);  // #378ef0 Spectrum Blue
+    const BG_WINDOW: Color32 = Color32::from_rgb(22, 22, 26); // #16161a canvas chrome
+    const BG_HEADER: Color32 = Color32::from_rgb(28, 28, 33); // #1c1c21 panel header strips
+    const BG_PANEL: Color32 = Color32::from_rgb(31, 31, 36); // #1f1f24 docked panels
+    const BG_SURFACE: Color32 = Color32::from_rgb(38, 38, 44); // #26262c section cards
+    const BG_CANVAS: Color32 = Color32::from_rgb(18, 18, 22); // #121216 plots & spatial plans
+    const BG_WIDGET: Color32 = Color32::from_rgb(46, 46, 54); // #2e2e36 flat buttons/inputs
+    const BG_HOVER: Color32 = Color32::from_rgb(58, 58, 69); // #3a3a45 hover state
+    const ACCENT_BLUE: Color32 = Color32::from_rgb(55, 142, 240); // #378ef0 Spectrum Blue
     const STAGE_ACTIVE: Color32 = Color32::from_rgb(52, 211, 153); // #34d399 active DSP stage
-    const STAGE_BYPASS: Color32 = Color32::from_rgb(156, 163, 175);// #9ca3af bypassed stage
-    const WARNING: Color32 = Color32::from_rgb(245, 158, 11);      // #f59e0b review/warning amber
-    const BORDER_SUBTLE: Color32 = Color32::from_rgb(58, 58, 68);  // #3a3a44 1px hairline seams
-    const TEXT_PRIMARY: Color32 = Color32::from_rgb(238, 238, 243);// #eeeef3 >= 12:1 contrast
-    const TEXT_MUTED: Color32 = Color32::from_rgb(161, 161, 172);  // #a1a1ac >= 5.2:1 contrast
+    const STAGE_BYPASS: Color32 = Color32::from_rgb(156, 163, 175); // #9ca3af bypassed stage
+    const WARNING: Color32 = Color32::from_rgb(245, 158, 11); // #f59e0b review/warning amber
+    const BORDER_SUBTLE: Color32 = Color32::from_rgb(58, 58, 68); // #3a3a44 1px hairline seams
+    const TEXT_PRIMARY: Color32 = Color32::from_rgb(238, 238, 243); // #eeeef3 >= 12:1 contrast
+    const TEXT_MUTED: Color32 = Color32::from_rgb(161, 161, 172); // #a1a1ac >= 5.2:1 contrast
 
     fn apply(ctx: &egui::Context) {
         let mut v = egui::Visuals::dark();
@@ -745,10 +805,15 @@ enum StudioCommand {
     LoadSession(PathBuf),
 }
 
+const MAX_HISTORY_AUDIO_BYTES: usize = 128 * 1024 * 1024;
+const MAX_HISTORY_UNIQUE_DRY_BUFFERS: usize = 8;
+
 struct StudioHistory {
     past: Vec<StudioSnapshot>,
     future: Vec<StudioSnapshot>,
     max_depth: usize,
+    max_audio_bytes: usize,
+    max_unique_dry_buffers: usize,
 }
 
 impl Default for StudioHistory {
@@ -757,20 +822,65 @@ impl Default for StudioHistory {
             past: Vec::new(),
             future: Vec::new(),
             max_depth: 64,
+            max_audio_bytes: MAX_HISTORY_AUDIO_BYTES,
+            max_unique_dry_buffers: MAX_HISTORY_UNIQUE_DRY_BUFFERS,
         }
     }
 }
 
 impl StudioHistory {
+    fn clear(&mut self) {
+        self.past.clear();
+        self.future.clear();
+    }
+
+    fn unique_dry_usage(&self) -> (usize, usize) {
+        let mut seen: Vec<(usize, usize)> = Vec::new();
+        for snap in self.past.iter().chain(self.future.iter()) {
+            if let Some(buf) = &snap.dry_audio {
+                let ptr = buf.as_ptr() as usize;
+                let len = buf.len();
+                if !seen.iter().any(|&(p, l)| p == ptr && l == len) {
+                    seen.push((ptr, len));
+                }
+            }
+        }
+        let total_bytes: usize = seen
+            .iter()
+            .map(|&(_, len)| len.saturating_mul(std::mem::size_of::<f32>()))
+            .sum();
+        (seen.len(), total_bytes)
+    }
+
+    fn enforce_budget(&mut self) {
+        while self.past.len() > self.max_depth {
+            self.past.remove(0);
+        }
+        while self.future.len() > self.max_depth {
+            self.future.remove(0);
+        }
+        loop {
+            let (unique_count, total_bytes) = self.unique_dry_usage();
+            if unique_count <= self.max_unique_dry_buffers && total_bytes <= self.max_audio_bytes {
+                break;
+            }
+            if self.past.len() > 1 {
+                self.past.remove(0);
+            } else if !self.future.is_empty() {
+                self.future.remove(0);
+            } else {
+                break;
+            }
+        }
+    }
+
     fn push(&mut self, before: StudioSnapshot) {
         if self.past.last() == Some(&before) {
             return;
         }
         self.past.push(before);
-        if self.past.len() > self.max_depth {
-            self.past.remove(0);
-        }
         self.future.clear();
+        self.enforce_budget();
     }
     fn can_undo(&self) -> bool {
         !self.past.is_empty()
@@ -781,11 +891,13 @@ impl StudioHistory {
     fn undo(&mut self, current: StudioSnapshot) -> Option<StudioSnapshot> {
         let prev = self.past.pop()?;
         self.future.push(current);
+        self.enforce_budget();
         Some(prev)
     }
     fn redo(&mut self, current: StudioSnapshot) -> Option<StudioSnapshot> {
         let next = self.future.pop()?;
         self.past.push(current);
+        self.enforce_budget();
         Some(next)
     }
 }
@@ -800,7 +912,9 @@ struct Studio {
 
     // Loaded audio & background job
     track: Option<Track>,
-    job: Option<mpsc::Receiver<Finished>>,
+    job: Option<(u64, mpsc::Receiver<Finished>)>,
+    active_job_id: u64,
+    job_cancel: Option<Arc<AtomicBool>>,
     app_state: AppState,
     play: Option<AudioPlayback>,
     take: Take,
@@ -893,6 +1007,8 @@ impl Studio {
             history: StudioHistory::default(),
             track: None,
             job: None,
+            active_job_id: 0,
+            job_cancel: None,
             app_state: AppState::Empty,
             play: None,
             take: Take::Original,
@@ -1048,7 +1164,11 @@ impl Studio {
     }
 
     fn apply_snapshot(&mut self, snap: StudioSnapshot, ctx: &egui::Context) {
-        let dry_changed = self.track.as_ref().and_then(|t| t.dry.as_ref()).map(|d| d.as_ref())
+        let dry_changed = self
+            .track
+            .as_ref()
+            .and_then(|t| t.dry.as_ref())
+            .map(|d| d.as_ref())
             != snap.dry_audio.as_ref().map(|d| d.as_ref());
         let post_changed = self.rig != snap.rig
             || self.mic_enabled != snap.mic_enabled
@@ -1083,7 +1203,9 @@ impl Studio {
         }
         if remix {
             self.remix_layers(ctx);
-        } else if (dry_changed || post_changed) && self.track.as_ref().is_some_and(|t| t.dry.is_some()) {
+        } else if (dry_changed || post_changed)
+            && self.track.as_ref().is_some_and(|t| t.dry.is_some())
+        {
             self.sync_post_dry_immediate(ctx);
         }
     }
@@ -1092,7 +1214,8 @@ impl Studio {
         let cur = self.capture_snapshot();
         if let Some(prev) = self.history.undo(cur) {
             self.apply_snapshot(prev, ctx);
-            self.status = "Undid studio edit and synchronized audio (original & playhead unchanged).".into();
+            self.status =
+                "Undid studio edit and synchronized audio (original & playhead unchanged).".into();
             true
         } else {
             false
@@ -1103,7 +1226,8 @@ impl Studio {
         let cur = self.capture_snapshot();
         if let Some(next) = self.history.redo(cur) {
             self.apply_snapshot(next, ctx);
-            self.status = "Redid studio edit and synchronized audio (original & playhead unchanged).".into();
+            self.status =
+                "Redid studio edit and synchronized audio (original & playhead unchanged).".into();
             true
         } else {
             false
@@ -1128,7 +1252,10 @@ impl Studio {
         let bytes = serde_json::to_vec_pretty(&session).map_err(|e| e.to_string())?;
         pipeline::write_bytes_atomic(path, &bytes).map_err(|e| e.to_string())?;
         self.session_path = Some(path.to_path_buf());
-        self.status = format!("Saved SpectraCraft session atomically to {}.", path.display());
+        self.status = format!(
+            "Saved SpectraCraft session atomically to {}.",
+            path.display()
+        );
         Ok(())
     }
 
@@ -1445,7 +1572,10 @@ impl Studio {
                 self.fit_recording();
                 Ok(())
             }
-            StudioCommand::ZoomTimeline { factor, anchor_frac } => {
+            StudioCommand::ZoomTimeline {
+                factor,
+                anchor_frac,
+            } => {
                 self.zoom_timeline(factor, anchor_frac);
                 Ok(())
             }
@@ -1573,6 +1703,25 @@ impl Studio {
         })
     }
 
+    fn begin_job(
+        &mut self,
+        cancel_existing: bool,
+    ) -> Option<(u64, Arc<AtomicBool>, mpsc::Sender<Finished>)> {
+        if !cancel_existing && self.job.is_some() {
+            self.status = "Another background job is already running; wait for it to finish.".into();
+            return None;
+        }
+        if let Some(prev_cancel) = self.job_cancel.take() {
+            prev_cancel.store(true, Ordering::Relaxed);
+        }
+        self.active_job_id = self.active_job_id.wrapping_add(1);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = mpsc::channel();
+        self.job_cancel = Some(Arc::clone(&cancel));
+        self.job = Some((self.active_job_id, rx));
+        Some((self.active_job_id, cancel, tx))
+    }
+
     fn stop(&mut self) {
         if let Some(p) = self.play.take() {
             self.cursor = p.stop(self.cursor);
@@ -1580,6 +1729,8 @@ impl Studio {
     }
 
     fn start(&mut self) {
+        // Always stop and release any active OS playback stream before opening a new one.
+        self.stop();
         let Some(t) = &self.track else {
             return;
         };
@@ -1593,18 +1744,20 @@ impl Studio {
                 rep.start_sample as f64 / t.rate as f64,
             ),
             _ => {
-                let Some(mut w) = t.audition_with_options(
+                let total = t.original.len();
+                let start = (self.cursor * t.rate as f64)
+                    .round()
+                    .clamp(0., total as f64) as usize;
+                let start = if start >= total { 0 } else { start };
+                let Some(w) = t.audition_slice_with_options(
                     self.take,
                     self.audition_rms_match,
                     self.preview_bit_depth,
+                    start,
+                    None,
                 ) else {
                     return;
                 };
-                let start = (self.cursor * t.rate as f64)
-                    .round()
-                    .clamp(0., w.len() as f64) as usize;
-                let start = if start >= w.len() { 0 } else { start };
-                w.drain(..start);
                 (w, start as f64 / t.rate as f64)
             }
         };
@@ -1627,6 +1780,9 @@ impl Studio {
     }
 
     fn seek_to(&mut self, seconds: f64) {
+        if !seconds.is_finite() {
+            return;
+        }
         let duration = self.track.as_ref().map_or(0.0, Track::duration);
         if duration <= 0.0 {
             return;
@@ -1660,8 +1816,13 @@ impl Studio {
         let Some(t) = &self.track else {
             return Err("Open a WAV file first.".into());
         };
+        if t.original.is_empty() {
+            return Err("Loaded audio is empty.".into());
+        }
         let (a_s, b_s) = match self.selection {
-            Some([a, b]) if (b - a) >= 0.05 => (a.min(b), a.max(b)),
+            Some([a, b]) if a.is_finite() && b.is_finite() && (b - a).abs() >= 0.05 => {
+                (a.min(b), a.max(b))
+            }
             _ => (0.0, t.duration().min(MAX_EXCERPT_SECS)),
         };
         let dur = b_s - a_s;
@@ -1730,20 +1891,24 @@ impl Studio {
         self.status = format!("Opening {}…", path.display());
         self.app_state = AppState::Loading;
         self.stop();
-        let (tx, rx) = mpsc::channel();
-        self.job = Some(rx);
+        let Some((_, cancel, tx)) = self.begin_job(true) else {
+            return;
+        };
         let ctx = ctx.clone();
         let display_max_hz = self.display_max_hz;
         std::thread::spawn(move || {
             let result = capture::load_wav_for_studio(&path)
                 .map(|(rate, original, recording)| {
+                    if cancel.load(Ordering::Relaxed) {
+                        return Err("Load cancelled.".to_owned());
+                    }
                     let overview_peaks = measure_peaks(&original);
                     let initial_view = Visual::measure_range(
                         &original,
                         rate,
                         display_max_hz.min(rate as f32 * 0.5),
                     );
-                    Track {
+                    Ok(Track {
                         name: path
                             .file_name()
                             .unwrap_or_default()
@@ -1762,15 +1927,22 @@ impl Studio {
                         recording,
                         layers: None,
                         guitar_cues: None,
-                    }
+                    })
                 })
-                .map_err(|e| e.to_string());
-            let _ = tx.send(Finished::Load(result));
-            ctx.request_repaint();
+                .map_err(|e| e.to_string())
+                .and_then(|r| r);
+            if !cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(Finished::Load(result));
+                ctx.request_repaint();
+            }
         });
     }
 
     fn regenerate(&mut self, ctx: &egui::Context) {
+        if self.job.is_some() {
+            self.status = "Wait for the current background job to finish before regenerating.".into();
+            return;
+        }
         let span = match self.target_excerpt_samples() {
             Ok(s) => s,
             Err(e) => {
@@ -1785,6 +1957,9 @@ impl Studio {
         let rate = t.rate;
         let excerpt: Vec<f32> = t.original[span[0]..span[1]].to_vec();
         let include_texture = self.include_texture;
+        let Some((_, cancel, tx)) = self.begin_job(false) else {
+            return;
+        };
         self.app_state = AppState::Busy;
         self.status = if include_texture {
             format!(
@@ -1799,20 +1974,27 @@ impl Studio {
                 span[1] as f64 / rate as f64
             )
         };
-        let (tx, rx) = mpsc::channel();
-        self.job = Some(rx);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let result =
                 analyze_with_texture(&excerpt, rate, include_texture).map_err(|e| e.to_string());
             drop(excerpt);
+            if cancel.load(Ordering::Relaxed) {
+                return;
+            }
             let result = result.and_then(|m| synthesize(&m, 12345).map_err(|e| e.to_string()));
-            let _ = tx.send(Finished::Render(result.map(|w| (span, w))));
-            ctx.request_repaint();
+            if !cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(Finished::Render(result.map(|w| (span, w))));
+                ctx.request_repaint();
+            }
         });
     }
 
     fn analyze_guitar_dry(&mut self, ctx: &egui::Context) {
+        if self.job.is_some() {
+            self.status = "Wait for the current background job to finish before running Stage 1.".into();
+            return;
+        }
         let span = match self.target_excerpt_samples() {
             Ok(s) => s,
             Err(e) => {
@@ -1832,6 +2014,9 @@ impl Studio {
             .cloned()
             .unwrap_or_else(|| self.sources[0].clone());
         let voicing = self.voicing.clone();
+        let Some((_, cancel, tx)) = self.begin_job(false) else {
+            return;
+        };
         self.app_state = AppState::Busy;
         self.status = format!(
             "Stage 1: extracting performance shape ({:.2}–{:.2} s) & synthesizing dry {} take…",
@@ -1839,8 +2024,6 @@ impl Studio {
             span[1] as f64 / rate as f64,
             source.name
         );
-        let (tx, rx) = mpsc::channel();
-        self.job = Some(rx);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let result = (|| -> spectracraft_mono::Result<(
@@ -1850,12 +2033,17 @@ impl Studio {
             )> {
                 let cues = reperform::analyze_guitar(&excerpt, rate)?;
                 drop(excerpt);
+                if cancel.load(Ordering::Relaxed) {
+                    return Err("Stage 1 cancelled.".into());
+                }
                 let dry = cues.synthesize_dry_for_source_with_voicing(&source, &voicing)?;
                 Ok((span, cues, dry))
             })()
             .map_err(|e| e.to_string());
-            let _ = tx.send(Finished::GuitarDry(result));
-            ctx.request_repaint();
+            if !cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(Finished::GuitarDry(result));
+                ctx.request_repaint();
+            }
         });
     }
 
@@ -1986,7 +2174,9 @@ impl Studio {
             || cfg.room_enabled
             || (cfg.plugin_slot.enabled && cfg.plugin_slot.plugin_id != PluginId::None);
 
-        let effective_cfg = if any_post_active && self.dry_review != DryReviewStatus::ApprovedByHuman {
+        let effective_cfg = if any_post_active
+            && self.dry_review != DryReviewStatus::ApprovedByHuman
+        {
             // Respect the 5-criterion human dry-review gate: keep output strictly dry until approved.
             let mut bypassed = cfg.clone();
             bypassed.mic_enabled = false;
@@ -2033,6 +2223,10 @@ impl Studio {
     }
 
     fn capture(&mut self, ctx: &egui::Context) {
+        if self.job.is_some() {
+            self.status = "Wait for the current background job to finish before running Stages 3–5.".into();
+            return;
+        }
         if self.dry_review != DryReviewStatus::ApprovedByHuman {
             self.status = format!(
                 "Post-processing locked: complete all 5 human dry listening checks ({}/5) before running Stages 3–5.",
@@ -2052,6 +2246,9 @@ impl Studio {
         let sources = self.sources.clone();
         let mics = self.mics.clone();
         let surfaces = self.surfaces.clone();
+        let Some((_, cancel, tx)) = self.begin_job(false) else {
+            return;
+        };
         // Do NOT reset self.cursor! Preserve playhead across post-dry pipeline rerenders.
         self.app_state = AppState::Busy;
         self.status = format!(
@@ -2068,14 +2265,13 @@ impl Studio {
                 "BYPASS".into()
             }
         );
-        let (tx, rx) = mpsc::channel();
-        self.job = Some(rx);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let out =
-                pipeline::run_post_dry_pipeline(&dry, rate, &cfg, &sources, &mics, &surfaces);
-            let _ = tx.send(Finished::Capture(cfg, span, out));
-            ctx.request_repaint();
+            let out = pipeline::run_post_dry_pipeline(&dry, rate, &cfg, &sources, &mics, &surfaces);
+            if !cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(Finished::Capture(cfg, span, out));
+                ctx.request_repaint();
+            }
         });
     }
 
@@ -2083,7 +2279,15 @@ impl Studio {
         let Some(t) = self.track.as_mut() else {
             return;
         };
-        let [v0, v1] = self.view_range;
+        if t.original.is_empty() {
+            return;
+        }
+        let dur = t.duration().max(0.01);
+        let [raw0, raw1] = self.view_range;
+        let a = if raw0.is_finite() { raw0 } else { 0.0 };
+        let b = if raw1.is_finite() { raw1 } else { dur };
+        let v0 = a.min(b).clamp(0.0, dur);
+        let v1 = a.max(b).clamp(v0, dur);
         let key = (
             (v0 * 1000.0).round() as u64,
             (v1 * 1000.0).round() as u64,
@@ -2103,17 +2307,14 @@ impl Studio {
         ));
         t.original_view = orig_vis;
 
-        let regen_source: Option<Vec<f32>> = if let Some(plot_only) = &t.layer_plot_only {
+        let regen_slice: Option<Cow<'_, [f32]>> = if let Some(plot_only) = &t.layer_plot_only {
             let [r0, _] = t.rebuilt_span.unwrap_or([0, plot_only.len()]);
-            let mut full = vec![0.0_f32; t.original.len()];
-            let n = plot_only.len().min(t.original.len().saturating_sub(r0));
-            full[r0..r0 + n].copy_from_slice(&plot_only[..n]);
-            Some(full)
+            Some(aligned_excerpt_slice(r0, plot_only, s0, s1))
         } else {
-            t.aligned_rebuilt()
+            t.aligned_rebuilt_slice(s0, s1)
         };
-        if let Some(full) = regen_source {
-            let reg_vis = Visual::measure_range(&full[s0..s1], t.rate, self.display_max_hz);
+        if let Some(slice) = regen_slice {
+            let reg_vis = Visual::measure_range(&slice, t.rate, self.display_max_hz);
             self.regenerated_texture = Some(ctx.load_texture(
                 "Regenerated spectrum",
                 reg_vis.spectrum.image(),
@@ -2125,8 +2326,8 @@ impl Studio {
             t.regenerated_view = None;
         }
 
-        if let Some(diff_full) = t.aligned_difference() {
-            let diff_vis = Visual::measure_range(&diff_full[s0..s1], t.rate, self.display_max_hz);
+        if let Some(diff_slice) = t.aligned_difference_slice(s0, s1) {
+            let diff_vis = Visual::measure_range(&diff_slice, t.rate, self.display_max_hz);
             self.difference_texture = Some(ctx.load_texture(
                 "Difference spectrum",
                 diff_vis.spectrum.image(),
@@ -2141,23 +2342,33 @@ impl Studio {
     }
 
     fn poll(&mut self, ctx: &egui::Context) {
-        let Some(rx) = &self.job else {
-            return;
-        };
-        let result = match rx.try_recv() {
-            Ok(r) => r,
-            Err(mpsc::TryRecvError::Empty) => return,
-            Err(_) => {
-                self.job = None;
-                self.app_state = AppState::Error;
-                self.status = "Processing stopped unexpectedly.".into();
+        let (job_id, result) = {
+            let Some((id, rx)) = &self.job else {
                 return;
+            };
+            let id = *id;
+            match rx.try_recv() {
+                Ok(r) => (id, r),
+                Err(mpsc::TryRecvError::Empty) => return,
+                Err(_) => {
+                    self.job = None;
+                    self.job_cancel = None;
+                    self.app_state = AppState::Error;
+                    self.status = "Processing stopped unexpectedly.".into();
+                    return;
+                }
             }
         };
         self.job = None;
+        self.job_cancel = None;
+        if job_id != self.active_job_id {
+            return;
+        }
         match result {
             Finished::Load(Ok(t)) => {
+                self.stop();
                 let dur = t.duration();
+                self.history.clear();
                 self.display_max_hz = 12_000_f32.min(t.rate as f32 * 0.5);
                 self.view_range = [0.0, dur.max(0.01)];
                 self.selection = if dur > MAX_EXCERPT_SECS {
@@ -2405,6 +2616,10 @@ impl Studio {
     }
 
     fn build_layers(&mut self, ctx: &egui::Context) {
+        if self.job.is_some() {
+            self.status = "Wait for the current background job to finish before analyzing layers.".into();
+            return;
+        }
         let span = match self.target_excerpt_samples() {
             Ok(s) => s,
             Err(e) => {
@@ -2419,18 +2634,22 @@ impl Studio {
         let input: Vec<f32> = t.original[span[0]..span[1]].to_vec();
         let rate = t.rate;
         self.stop();
+        let Some((_, cancel, tx)) = self.begin_job(false) else {
+            return;
+        };
         self.app_state = AppState::Busy;
         self.status = format!(
             "Analyzing editable Pitch, Faint ringing, Texture, and Breath accent ({:.2}–{:.2} s)…",
             span[0] as f64 / rate as f64,
             span[1] as f64 / rate as f64
         );
-        let (tx, rx) = mpsc::channel();
-        self.job = Some(rx);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let result = (|| -> spectracraft_mono::Result<LayerSession> {
                 let packet = edge::analyze(&input, rate, edge::Options::default())?;
+                if cancel.load(Ordering::Relaxed) {
+                    return Err("Layer analysis cancelled.".into());
+                }
                 let rendered = workspace::render(&packet, 734)?;
                 let headroom = rendered.headroom(&input);
                 Ok(LayerSession {
@@ -2443,8 +2662,10 @@ impl Studio {
                 })
             })()
             .map_err(|e| e.to_string());
-            let _ = tx.send(Finished::Layers(result));
-            ctx.request_repaint();
+            if !cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(Finished::Layers(result));
+                ctx.request_repaint();
+            }
         });
     }
 
@@ -2488,6 +2709,10 @@ impl Studio {
     }
 
     fn load_layers(&mut self, path: &Path, ctx: &egui::Context) {
+        if self.job.is_some() {
+            self.status = "Wait for the current background job to finish before loading layers.".into();
+            return;
+        }
         let Some(track) = &self.track else {
             return;
         };
@@ -2508,10 +2733,11 @@ impl Studio {
             }
         };
         self.stop();
+        let Some((_, cancel, tx)) = self.begin_job(false) else {
+            return;
+        };
         self.app_state = AppState::Busy;
         self.status = "Loading editable analysis…".into();
-        let (tx, rx) = mpsc::channel();
-        self.job = Some(rx);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let result = (|| -> spectracraft_mono::Result<LayerSession> {
@@ -2521,6 +2747,9 @@ impl Studio {
                         "Analysis rate and duration must match the loaded reference/selection."
                             .into(),
                     );
+                }
+                if cancel.load(Ordering::Relaxed) {
+                    return Err("Layer load cancelled.".into());
                 }
                 let rendered = workspace::render(&packet, 734)?;
                 let headroom = rendered.headroom(&source);
@@ -2534,8 +2763,10 @@ impl Studio {
                 })
             })()
             .map_err(|e| e.to_string());
-            let _ = tx.send(Finished::Layers(result));
-            ctx.request_repaint();
+            if !cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(Finished::Layers(result));
+                ctx.request_repaint();
+            }
         });
     }
 }
@@ -2832,7 +3063,10 @@ fn draw_time_ruler(
     let r = resp.rect;
     p.rect_filled(r, 0., StudioTheme::BG_HEADER);
     p.line_segment(
-        [Pos2::new(r.left(), r.bottom()), Pos2::new(r.right(), r.bottom())],
+        [
+            Pos2::new(r.left(), r.bottom()),
+            Pos2::new(r.right(), r.bottom()),
+        ],
         Stroke::new(1.0, StudioTheme::BORDER_SUBTLE),
     );
     let plot = Rect::from_min_max(r.min + Vec2::new(64., 0.), r.max);
@@ -2856,7 +3090,10 @@ fn draw_time_ruler(
         if i < ticks {
             let mid_x = plot.left() + plot.width() * ((i as f32 + 0.5) / ticks as f32);
             p.line_segment(
-                [Pos2::new(mid_x, r.bottom() - 4.), Pos2::new(mid_x, r.bottom())],
+                [
+                    Pos2::new(mid_x, r.bottom() - 4.),
+                    Pos2::new(mid_x, r.bottom()),
+                ],
                 Stroke::new(0.8, Color32::from_gray(75)),
             );
         }
@@ -3196,7 +3433,10 @@ fn spectrum_plot_panel(
     let plot = Rect::from_min_max(r.min + Vec2::new(64., 0.), r.max);
     // Axis gutter separator
     painter.line_segment(
-        [Pos2::new(plot.left(), r.top()), Pos2::new(plot.left(), r.bottom())],
+        [
+            Pos2::new(plot.left(), r.top()),
+            Pos2::new(plot.left(), r.bottom()),
+        ],
         Stroke::new(1.0, StudioTheme::BORDER_SUBTLE),
     );
     let span = (view[1] - view[0]).max(1e-4);
@@ -3264,7 +3504,12 @@ fn spectrum_plot_panel(
             );
             let tag = selection.map(|[a, b]| match marquee_hz {
                 Some([flo, fhi]) => {
-                    format!("{:.2}s · {:.0}–{:.0} Hz", (b - a).abs(), flo.min(fhi), flo.max(fhi))
+                    format!(
+                        "{:.2}s · {:.0}–{:.0} Hz",
+                        (b - a).abs(),
+                        flo.min(fhi),
+                        flo.max(fhi)
+                    )
                 }
                 None => format!("{:.2}s", (b - a).abs()),
             });
@@ -3322,7 +3567,10 @@ fn wave_plot_panel(
     );
     let plot = Rect::from_min_max(r.min + Vec2::new(64., 0.), r.max);
     paint.line_segment(
-        [Pos2::new(plot.left(), r.top()), Pos2::new(plot.left(), r.bottom())],
+        [
+            Pos2::new(plot.left(), r.top()),
+            Pos2::new(plot.left(), r.bottom()),
+        ],
         Stroke::new(1.0, StudioTheme::BORDER_SUBTLE),
     );
     // Crisp 0.0 amplitude centerline
@@ -3437,7 +3685,11 @@ impl Studio {
                 ui.horizontal(|ui| {
                     ui.strong("Inspector");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("×").on_hover_text("Hide Inspector").clicked() {
+                        if ui
+                            .small_button("×")
+                            .on_hover_text("Hide Inspector")
+                            .clicked()
+                        {
                             self.inspector_dock = InspectorDock::Hidden;
                         }
                         if ui
@@ -3471,9 +3723,17 @@ impl Studio {
 
         ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.inspector_tab, InspectorTab::Source, "1. Source");
-            ui.selectable_value(&mut self.inspector_tab, InspectorTab::DryEdit, "2. Dry Edit");
+            ui.selectable_value(
+                &mut self.inspector_tab,
+                InspectorTab::DryEdit,
+                "2. Dry Edit",
+            );
             ui.selectable_value(&mut self.inspector_tab, InspectorTab::Microphone, "3. Mic");
-            ui.selectable_value(&mut self.inspector_tab, InspectorTab::Materials, "Materials");
+            ui.selectable_value(
+                &mut self.inspector_tab,
+                InspectorTab::Materials,
+                "Materials",
+            );
             ui.selectable_value(&mut self.inspector_tab, InspectorTab::Room, "4. Room");
             ui.selectable_value(&mut self.inspector_tab, InspectorTab::Plugin, "5. Plugin");
         });
@@ -3796,7 +4056,11 @@ impl Studio {
             if let Some(p) = lib
                 .instruments
                 .iter()
-                .find(|ip| src_name.to_ascii_lowercase().contains(&ip.family.to_ascii_lowercase()))
+                .find(|ip| {
+                    src_name
+                        .to_ascii_lowercase()
+                        .contains(&ip.family.to_ascii_lowercase())
+                })
                 .or_else(|| lib.instruments.first())
             {
                 ui.small(format!(
@@ -3882,8 +4146,14 @@ impl Studio {
                     )
                     .changed();
                 if changed_t {
-                    let a = self.region_edit_draft.start_s.min(self.region_edit_draft.end_s);
-                    let b = self.region_edit_draft.start_s.max(self.region_edit_draft.end_s);
+                    let a = self
+                        .region_edit_draft
+                        .start_s
+                        .min(self.region_edit_draft.end_s);
+                    let b = self
+                        .region_edit_draft
+                        .start_s
+                        .max(self.region_edit_draft.end_s);
                     self.region_edit_draft.start_s = a;
                     self.region_edit_draft.end_s = b;
                     if b - a >= 0.01 {
@@ -3999,7 +4269,11 @@ impl Studio {
             ui.separator();
             ui.horizontal_wrapped(|ui| {
                 ui.label("Region preview:");
-                ui.selectable_value(&mut self.region_preview, RegionPreviewMode::Off, "Full Track");
+                ui.selectable_value(
+                    &mut self.region_preview,
+                    RegionPreviewMode::Off,
+                    "Full Track",
+                );
                 ui.selectable_value(
                     &mut self.region_preview,
                     RegionPreviewMode::Before,
@@ -4020,7 +4294,11 @@ impl Studio {
                     rep.end_sample,
                     rep.affected_notes,
                     rep.effective_action,
-                    if rep.outside_bit_identical { "YES" } else { "NO" }
+                    if rep.outside_bit_identical {
+                        "YES"
+                    } else {
+                        "NO"
+                    }
                 ));
                 if let Some(msg) = rep.unresolved_note.as_ref() {
                     ui.colored_label(StudioTheme::WARNING, msg);
@@ -4300,7 +4578,11 @@ impl Studio {
                     .selected_text(name)
                     .show_ui(ui, |ui| {
                         for (i, s) in self.surfaces.iter().enumerate() {
-                            ui.selectable_value(&mut self.rig.surface_faces[face], i, s.name.as_str());
+                            ui.selectable_value(
+                                &mut self.rig.surface_faces[face],
+                                i,
+                                s.name.as_str(),
+                            );
                         }
                     });
             });
@@ -4376,7 +4658,10 @@ impl Studio {
                 r[0], r[1], r[2], r[3], r[4], r[5]
             ));
             ui.small(format!("Assembly: {}", surf.assembly));
-            ui.small(format!("Standard: {} ({})", surf.standard, surf.response_kind));
+            ui.small(format!(
+                "Standard: {} ({})",
+                surf.standard, surf.response_kind
+            ));
             ui.small(format!("Biot-JCA: {}", surf.biot.status));
             ui.small(&surf.provenance);
             ui.small(&surf.notes);
@@ -4493,7 +4778,9 @@ impl Studio {
                     ui.colored_label(StudioTheme::STAGE_BYPASS, "BYPASSED (Clean pass-through)");
                 }
             });
-            ui.small("Inserted strictly after Stage 4 and before final output. Bypassed by default.");
+            ui.small(
+                "Inserted strictly after Stage 4 and before final output. Bypassed by default.",
+            );
             ui.add_space(4.);
 
             let pid_lbl = |id: PluginId| match id {
@@ -4515,11 +4802,7 @@ impl Studio {
                             PluginId::NoiseControl,
                             PluginId::PhaseLimiter,
                         ] {
-                            ui.selectable_value(
-                                &mut self.plugin_slot.plugin_id,
-                                id,
-                                pid_lbl(id),
-                            );
+                            ui.selectable_value(&mut self.plugin_slot.plugin_id, id, pid_lbl(id));
                         }
                     });
             });
@@ -5132,7 +5415,11 @@ impl Studio {
             );
             ui.label(&self.status);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("×").on_hover_text("Hide Lower Dock").clicked() {
+                if ui
+                    .small_button("×")
+                    .on_hover_text("Hide Lower Dock")
+                    .clicked()
+                {
                     self.lower_dock = LowerDock::Hidden;
                 }
                 if ui
@@ -5886,7 +6173,11 @@ impl Studio {
                 if ui
                     .add_enabled(
                         self.track.is_some(),
-                        egui::Button::new(if self.play.is_some() { "❚❚ Pause" } else { "▶ Play" }),
+                        egui::Button::new(if self.play.is_some() {
+                            "❚❚ Pause"
+                        } else {
+                            "▶ Play"
+                        }),
                     )
                     .clicked()
                 {
@@ -6481,10 +6772,8 @@ mod tests {
     #[test]
     fn complete_long_file_workflow_navigates_selects_regenerates_captures_and_exports_preserving_original(
     ) {
-        let base = std::env::temp_dir().join(format!(
-            "spectracraft-long-workflow-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("spectracraft-long-workflow-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir(&base).unwrap();
         let source = base.join("long_35s.wav");
@@ -6550,7 +6839,10 @@ mod tests {
         let rig_expected = app.rig.clone();
         assert_eq!(app.dry_review, DryReviewStatus::NotReviewed);
         app.capture(&ctx);
-        assert!(app.job.is_none(), "unreviewed dry take must block capture post-processing");
+        assert!(
+            app.job.is_none(),
+            "unreviewed dry take must block capture post-processing"
+        );
         assert!(app.applied_rig.is_none());
 
         // Pass all 5 human listening checks (rhythm, phrasing, dynamics, sustain, artifact_free)
@@ -6964,5 +7256,93 @@ mod layer_tests {
         app.switch(Take::Original);
         assert_eq!(app.cursor, 0.12);
         assert_eq!(&app.track.as_ref().unwrap().original[..], &x);
+    }
+
+    #[test]
+    fn studio_history_clears_and_enforces_unique_dry_buffer_and_byte_caps() {
+        let app = Studio::new();
+        let mut hist = StudioHistory {
+            max_depth: 64,
+            max_audio_bytes: 16 * std::mem::size_of::<f32>(),
+            max_unique_dry_buffers: 3,
+            ..Default::default()
+        };
+        for i in 0..6_u32 {
+            let mut snap = app.capture_snapshot();
+            snap.dry_audio = Some(Arc::from(vec![i as f32; 4]));
+            hist.push(snap);
+        }
+        let (unique_count, total_bytes) = hist.unique_dry_usage();
+        assert!(unique_count <= 3);
+        assert!(total_bytes <= 16 * std::mem::size_of::<f32>());
+        hist.clear();
+        assert!(!hist.can_undo());
+        assert!(!hist.can_redo());
+        assert_eq!(hist.unique_dry_usage(), (0, 0));
+    }
+
+    #[test]
+    fn studio_seek_rejects_nan_and_begin_job_prevents_overlap_and_cancels_on_replace() {
+        let mut app = Studio::new();
+        app.cursor = 1.25;
+        app.seek_to(f64::NAN);
+        app.seek_to(f64::INFINITY);
+        assert_eq!(app.cursor, 1.25);
+
+        let (id1, cancel1, _tx1) = app.begin_job(false).expect("first job starts");
+        assert!(app.begin_job(false).is_none(), "overlapping render job blocked");
+        assert!(!cancel1.load(Ordering::Relaxed));
+
+        let (id2, cancel2, _tx2) = app.begin_job(true).expect("cancelling load job starts");
+        assert_ne!(id1, id2);
+        assert!(cancel1.load(Ordering::Relaxed));
+        assert!(!cancel2.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn track_slice_helpers_match_full_audition_without_full_track_padding() {
+        let original: Vec<f32> = (0..100).map(|i| (i as f32) * 0.005).collect();
+        let rebuilt: Vec<f32> = (0..20).map(|i| 0.25 + (i as f32) * 0.005).collect();
+        let t = Track {
+            name: String::new(),
+            rate: 48_000,
+            overview_peaks: measure_peaks(&original),
+            original: original.into(),
+            rebuilt_span: Some([30, 50]),
+            rebuilt: Some(rebuilt),
+            dry: None,
+            layer_plot_only: None,
+            layers: None,
+            guitar_cues: None,
+            recording: Recording {
+                channels: 1,
+                left_minus_right_db: None,
+                lr_similarity: None,
+            },
+            original_view: Visual::measure(&[0.0; 100], 48_000),
+            regenerated_view: None,
+            difference_view: None,
+        };
+        let inside = t.aligned_rebuilt_slice(35, 45).unwrap();
+        assert!(matches!(inside, Cow::Borrowed(_)));
+        assert_eq!(inside.len(), 10);
+
+        let full_orig = t.audition(Take::Original).unwrap();
+        let slice_orig = t
+            .audition_slice_with_options(Take::Original, true, PreviewBitDepth::Float32, 25, Some(55))
+            .unwrap();
+        assert_eq!(slice_orig, full_orig[25..55]);
+
+        let full_reg = t.audition(Take::Regenerated).unwrap();
+        let slice_reg = t
+            .audition_slice_with_options(Take::Regenerated, true, PreviewBitDepth::Float32, 25, Some(55))
+            .unwrap();
+        assert_eq!(slice_reg, full_reg[25..55]);
+
+        let full_diff = t.audition(Take::Difference).unwrap();
+        let slice_diff = t
+            .audition_slice_with_options(Take::Difference, true, PreviewBitDepth::Float32, 25, Some(55))
+            .unwrap();
+        assert_eq!(slice_diff, full_diff[25..55]);
     }
 }

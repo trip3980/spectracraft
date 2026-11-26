@@ -46,6 +46,10 @@ export function useAudioEngine({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const activeGainRef = useRef<GainNode | null>(null);
+  const fadingNodesRef = useRef<Set<{ src: AudioBufferSourceNode; gain: GainNode }>>(new Set());
+  const bitDepthCacheRef = useRef<WeakMap<AudioBuffer, Partial<Record<16 | 24, AudioBuffer>>>>(
+    new WeakMap(),
+  );
   const playStartCtxTimeRef = useRef(0);
   const playStartOffsetRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -65,6 +69,21 @@ export function useAudioEngine({
   }, []);
 
   const stopPlaybackNode = useCallback(() => {
+    for (const entry of fadingNodesRef.current) {
+      try {
+        entry.src.onended = null;
+        entry.src.stop();
+        entry.src.disconnect();
+      } catch {
+        // already stopped
+      }
+      try {
+        entry.gain.disconnect();
+      } catch {
+        // already disconnected
+      }
+    }
+    fadingNodesRef.current.clear();
     if (activeSourceRef.current) {
       try {
         activeSourceRef.current.onended = null;
@@ -112,57 +131,113 @@ export function useAudioEngine({
               : regenBuffer;
       if (!base) return null;
       if (previewBitDepth === 32) return base;
+      let entry = bitDepthCacheRef.current.get(base);
+      if (!entry) {
+        entry = {};
+        bitDepthCacheRef.current.set(base, entry);
+      }
+      const cached = entry[previewBitDepth];
+      if (cached) return cached;
       const ctx = ensureAudioContext();
-      return buildBitDepthBuffer(ctx, base, previewBitDepth);
+      const built = buildBitDepthBuffer(ctx, base, previewBitDepth);
+      entry[previewBitDepth] = built;
+      return built;
     },
     [origBuffer, regenBuffer, capturedBuffer, diffBuffer, previewBitDepth, ensureAudioContext],
   );
 
-  const crossfadeToBuffer = useCallback((nextBuf: AudioBuffer) => {
-    if (!isPlayingRef.current || !audioCtxRef.current) return;
+  const crossfadeToBuffer = useCallback(
+    (nextBuf: AudioBuffer) => {
+      if (!isPlayingRef.current || !audioCtxRef.current) return;
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const fadeS = 0.04;
+      const pos = Math.max(0, Math.min(nextBuf.duration - 0.02, playheadRef.current));
+      const matchDb = takeModeRef.current === 'regenerated' && levelMatchAb ? abDryMatchGainDb : 0;
+      const targetGain = dbToSafeLinearGain(matchDb);
+
+      const oldSrc = activeSourceRef.current;
+      const oldGain = activeGainRef.current;
+
+      const newSrc = ctx.createBufferSource();
+      const newGain = ctx.createGain();
+      newSrc.buffer = nextBuf;
+      newGain.gain.setValueAtTime(0.0001, now);
+      newGain.gain.linearRampToValueAtTime(targetGain, now + fadeS);
+      newSrc.connect(newGain);
+      newGain.connect(ctx.destination);
+      newSrc.start(now, pos);
+
+      if (oldGain && oldSrc) {
+        const fadingEntry = { src: oldSrc, gain: oldGain };
+        fadingNodesRef.current.add(fadingEntry);
+        try {
+          oldSrc.onended = () => {
+            fadingNodesRef.current.delete(fadingEntry);
+            try {
+              oldSrc.disconnect();
+            } catch {
+              // ignore
+            }
+            try {
+              oldGain.disconnect();
+            } catch {
+              // ignore
+            }
+          };
+          oldGain.gain.cancelScheduledValues(now);
+          oldGain.gain.setValueAtTime(Math.max(0.0001, oldGain.gain.value), now);
+          oldGain.gain.linearRampToValueAtTime(0.0001, now + fadeS);
+          oldSrc.stop(now + fadeS + 0.01);
+        } catch {
+          fadingNodesRef.current.delete(fadingEntry);
+        }
+      }
+
+      activeSourceRef.current = newSrc;
+      activeGainRef.current = newGain;
+      playStartCtxTimeRef.current = now;
+      playStartOffsetRef.current = pos;
+
+      newSrc.onended = () => {
+        if (activeSourceRef.current === newSrc) {
+          activeSourceRef.current = null;
+          activeGainRef.current = null;
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        }
+      };
+    },
+    [levelMatchAb, abDryMatchGainDb],
+  );
+
+  // Live-update gain when A/B level-match setting toggles during active playback
+  useEffect(() => {
+    if (!isPlayingRef.current || !audioCtxRef.current || !activeGainRef.current) return;
     const ctx = audioCtxRef.current;
     const now = ctx.currentTime;
-    const fadeS = 0.04;
-    const pos = Math.max(0, Math.min(nextBuf.duration - 0.02, playheadRef.current));
-
-    const oldSrc = activeSourceRef.current;
-    const oldGain = activeGainRef.current;
-
-    const newSrc = ctx.createBufferSource();
-    const newGain = ctx.createGain();
-    newSrc.buffer = nextBuf;
-    newGain.gain.setValueAtTime(0.0001, now);
-    newGain.gain.linearRampToValueAtTime(1.0, now + fadeS);
-    newSrc.connect(newGain);
-    newGain.connect(ctx.destination);
-    newSrc.start(now, pos);
-
-    if (oldGain && oldSrc) {
-      try {
-        oldSrc.onended = null;
-        oldGain.gain.cancelScheduledValues(now);
-        oldGain.gain.setValueAtTime(Math.max(0.0001, oldGain.gain.value), now);
-        oldGain.gain.linearRampToValueAtTime(0.0001, now + fadeS);
-        oldSrc.stop(now + fadeS + 0.01);
-      } catch {
-        // old source already ended
-      }
+    const matchDb = takeModeRef.current === 'regenerated' && levelMatchAb ? abDryMatchGainDb : 0;
+    const targetGain = dbToSafeLinearGain(matchDb);
+    try {
+      activeGainRef.current.gain.cancelScheduledValues(now);
+      activeGainRef.current.gain.setValueAtTime(activeGainRef.current.gain.value, now);
+      activeGainRef.current.gain.linearRampToValueAtTime(targetGain, now + 0.02);
+    } catch {
+      // ignore if audio context is closing
     }
+  }, [levelMatchAb, abDryMatchGainDb]);
 
-    activeSourceRef.current = newSrc;
-    activeGainRef.current = newGain;
-    playStartCtxTimeRef.current = now;
-    playStartOffsetRef.current = pos;
-
-    newSrc.onended = () => {
-      if (activeSourceRef.current === newSrc) {
-        activeSourceRef.current = null;
-        activeGainRef.current = null;
-        isPlayingRef.current = false;
-        setIsPlaying(false);
-      }
-    };
-  }, []);
+  // Live-crossfade when preview bit depth changes during active playback
+  const prevBitDepthRef = useRef<32 | 24 | 16>(previewBitDepth);
+  useEffect(() => {
+    if (prevBitDepthRef.current === previewBitDepth) return;
+    prevBitDepthRef.current = previewBitDepth;
+    if (!isPlayingRef.current) return;
+    const nextBuf = getPlaybackBufferForTake(takeModeRef.current);
+    if (nextBuf) {
+      crossfadeToBuffer(nextBuf);
+    }
+  }, [previewBitDepth, getPlaybackBufferForTake, crossfadeToBuffer]);
 
   const startPlaybackAt = useCallback(
     (offsetS: number, mode: TakeMode) => {
@@ -261,7 +336,18 @@ export function useAudioEngine({
     [stopPlaybackNode],
   );
 
-  useEffect(() => () => stopPlaybackNode(), [stopPlaybackNode]);
+  useEffect(
+    () => () => {
+      stopPlaybackNode();
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        void audioCtxRef.current.close().catch(() => {
+          // ignore close errors during teardown
+        });
+        audioCtxRef.current = null;
+      }
+    },
+    [stopPlaybackNode],
+  );
 
   return {
     takeMode,

@@ -356,14 +356,9 @@ pub struct Recording {
 pub fn load_wav_for_capture(path: &Path) -> Result<(u32, Vec<f32>, Recording)> {
     let mut wav = hound::WavReader::open(path)?;
     let s = wav.spec();
-    if !(1..=2).contains(&s.channels) || !(8_000..=96_000).contains(&s.sample_rate) {
-        return Err("Expected a mono or stereo WAV at 8–96 kHz".into());
-    }
-    if wav.duration() > s.sample_rate * 30 {
-        return Err("This preview supports WAV excerpts up to 30 seconds".into());
-    }
+    let initial_cap = crate::validate_wav_spec(s, wav.duration(), 30, true)?;
     let channels = s.channels as usize;
-    let mut l = Vec::with_capacity(wav.duration() as usize);
+    let mut l = Vec::with_capacity(initial_cap);
     let (mut ll, mut rr, mut lr, mut sl, mut sr) = (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
     let mut last = 0.0_f64;
     let scale = 2_f32.powi(i32::from(s.bits_per_sample) - 1);
@@ -581,9 +576,15 @@ impl Biquad {
     #[inline]
     fn process(&mut self, x: f64) -> f64 {
         let y = self.b0 * x + self.z1;
-        self.z1 = self.b1 * x - self.a1 * y + self.z2;
-        self.z2 = self.b2 * x - self.a2 * y;
-        y
+        let z1 = self.b1 * x - self.a1 * y + self.z2;
+        let z2 = self.b2 * x - self.a2 * y;
+        self.z1 = if z1.abs() < 1e-30 { 0.0 } else { z1 };
+        self.z2 = if z2.abs() < 1e-30 { 0.0 } else { z2 };
+        if y.abs() < 1e-30 {
+            0.0
+        } else {
+            y
+        }
     }
 }
 
@@ -616,14 +617,9 @@ pub fn enforce_editing_headroom(samples: &[f32], peak_ceiling: f32) -> (Vec<f32>
 pub fn load_wav_for_studio(path: &Path) -> Result<(u32, Vec<f32>, Recording)> {
     let mut wav = hound::WavReader::open(path)?;
     let s = wav.spec();
-    if !(1..=2).contains(&s.channels) || !(8_000..=96_000).contains(&s.sample_rate) {
-        return Err("Expected a mono or stereo WAV at 8–96 kHz".into());
-    }
-    if wav.duration() > s.sample_rate * 600 {
-        return Err("Studio timeline loader supports WAV files up to 10 minutes".into());
-    }
+    let initial_cap = crate::validate_wav_spec(s, wav.duration(), 600, true)?;
     let channels = s.channels as usize;
-    let mut l = Vec::with_capacity(wav.duration() as usize);
+    let mut l = Vec::with_capacity(initial_cap);
     let (mut ll, mut rr, mut lr, mut sl, mut sr) = (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
     let mut last = 0.0_f64;
     let scale = 2_f32.powi(i32::from(s.bits_per_sample) - 1);
@@ -762,11 +758,101 @@ fn apply_mic_profile(
     apply_biquad_chain(input, &mut filters)
 }
 
-/// Render a dry performance through the active `StudioRig` using the exact 6-band image-source
-/// acoustic model across all 6 room faces (`[-X, +X, -Y, +Y, floor, ceiling]`), source radiation,
-/// mic position, 3D mic aim, polar pickup, and optional parametric mic profile. Direct arrival
-/// stays sample-aligned with input. No implicit normalization, limiter, noise, or dither.
-pub fn render_studio_rig_with_mic_eq(
+fn build_closed_room_fdn(
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    surfaces: &[crate::studio_catalog::SurfaceEntry],
+    plan: &crate::studio_catalog::CapturePlan6,
+) -> Option<crate::acoustics_physics::LateRoomFdn> {
+    use crate::studio_catalog::RoomPreset;
+    if matches!(rig.room_preset, RoomPreset::Direct | RoomPreset::Open) {
+        return None;
+    }
+    let dims_m = [
+        f64::from(rig.dimensions_m[0]),
+        f64::from(rig.dimensions_m[1]),
+        f64::from(rig.dimensions_m[2]),
+    ];
+    let faces_eff_alpha: [[f64; 6]; 6] = std::array::from_fn(|f| {
+        surfaces
+            .get(rig.surface_faces[f])
+            .map(|s| s.effective_absorption())
+            .unwrap_or([1.0; 6])
+    });
+    crate::acoustics_physics::LateRoomFdn::from_room_physics(
+        rate,
+        dims_m,
+        &faces_eff_alpha,
+        plan.speed_of_sound_mps,
+        plan.distance_m,
+        plan.last_path_s.max(0.015),
+    )
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StereoAudio {
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+}
+
+fn apply_stage3_mic_response(
+    signal: &[f32],
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    mics: &[crate::studio_catalog::MicEntry],
+    plan: &crate::studio_catalog::CapturePlan6,
+    preamp_drive: f64,
+) -> Vec<f32> {
+    let slot = rig.active_mic();
+    let eff_pattern = slot.effective_pattern(mics);
+    let mut prox = crate::acoustics_physics::ProximityFilter::new(
+        rate,
+        eff_pattern,
+        plan.distance_m,
+        plan.speed_of_sound_mps,
+    );
+    let with_prox = prox.apply_slice(signal);
+
+    let with_fr = if let Some(entry) = mics.get(slot.catalog_index) {
+        if let Some(fir) = crate::acoustics_physics::minimum_phase_fir_from_fr_points(
+            &entry.published_fr_points,
+            rate,
+            128,
+        ) {
+            let fir_out = crate::acoustics_physics::apply_fir(&with_prox, &fir);
+            if entry.renderer_profile != crate::studio_catalog::MicRendererProfile::FlatIdeal {
+                // A 128-tap FIR at 48 kHz lacks sub-30 Hz resolution; add the physical
+                // capsule/transformer subsonic rolloff (20 Hz Butterworth) so proximity boost
+                // cannot accumulate DC or subsonic runaway.
+                let mut dc_hp = [Biquad::highpass(
+                    f64::from(rate.max(8_000)),
+                    20.0,
+                    std::f64::consts::FRAC_1_SQRT_2,
+                )];
+                apply_biquad_chain(&fir_out, &mut dc_hp)
+            } else {
+                fir_out
+            }
+        } else {
+            apply_mic_profile(&with_prox, rate, entry.renderer_profile)
+        }
+    } else {
+        with_prox
+    };
+
+    if preamp_drive.is_finite() && preamp_drive > 1e-6 {
+        let mut preamp = crate::acoustics_physics::PreampStage::new(rate, preamp_drive);
+        preamp.apply_slice(&with_fr)
+    } else {
+        with_fr
+    }
+}
+
+/// Render a mono dry performance through the active `StudioRig` with explicit Stage 3
+/// mic EQ toggle, optional oversampled Stage 3 preamp drive (`0.0` = bit-identical bypass),
+/// and optional un-truncated full room decay tail preservation.
+#[allow(clippy::too_many_arguments)]
+pub fn render_studio_rig_with_options(
     input: &[f32],
     rate: u32,
     rig: &crate::studio_catalog::StudioRig,
@@ -774,6 +860,8 @@ pub fn render_studio_rig_with_mic_eq(
     mics: &[crate::studio_catalog::MicEntry],
     surfaces: &[crate::studio_catalog::SurfaceEntry],
     apply_mic_eq: bool,
+    preamp_drive: f64,
+    preserve_tail: bool,
 ) -> Vec<f32> {
     if input.is_empty() {
         return Vec::new();
@@ -786,16 +874,149 @@ pub fn render_studio_rig_with_mic_eq(
         4,
         crate::studio_catalog::Timing::AlignDirect,
     );
-    let roomed = crate::studio_catalog::render_capture_6band(input, rate, &plan);
+    let fdn_opt = build_closed_room_fdn(rate, rig, surfaces, &plan);
+    let mut roomed = if preserve_tail {
+        let extra_tail_s = if fdn_opt.is_some() { 1.25 } else { 0.0 };
+        crate::studio_catalog::render_capture_6band_with_tail(input, rate, &plan, extra_tail_s)
+    } else {
+        crate::studio_catalog::render_capture_6band(input, rate, &plan)
+    };
+    if let Some(mut fdn) = fdn_opt {
+        for (i, dst) in roomed.iter_mut().enumerate() {
+            let dry_s = input.get(i).copied().unwrap_or(0.0);
+            let clean = if dry_s.is_finite() {
+                f64::from(dry_s)
+            } else {
+                0.0
+            };
+            let late = fdn.tick(clean);
+            if late.is_finite() {
+                *dst += late as f32;
+            }
+        }
+    }
     if !apply_mic_eq {
         return roomed;
     }
-    let profile = mics
-        .get(rig.active_mic().catalog_index)
-        .map_or(crate::studio_catalog::MicRendererProfile::FlatIdeal, |m| {
-            m.renderer_profile
-        });
-    apply_mic_profile(&roomed, rate, profile)
+    apply_stage3_mic_response(&roomed, rate, rig, mics, &plan, preamp_drive)
+}
+
+/// Render a dry performance into true stereo `[left, right]` with decorrelated Householder
+/// FDN stereo late-room bloom, LR4 6-band early reflections, JCA oblique porous absorption,
+/// ISO 9613-1 air absorption, spherical-wave proximity, digitized-FR minimum-phase FIR, and
+/// optional Stage 3 oversampled preamp coloration.
+#[allow(clippy::too_many_arguments)]
+pub fn render_studio_rig_stereo_with_options(
+    input: &[f32],
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    sources: &[crate::studio_catalog::SourceEntry],
+    mics: &[crate::studio_catalog::MicEntry],
+    surfaces: &[crate::studio_catalog::SurfaceEntry],
+    apply_mic_eq: bool,
+    preamp_drive: f64,
+    preserve_tail: bool,
+) -> StereoAudio {
+    if input.is_empty() {
+        return StereoAudio {
+            left: Vec::new(),
+            right: Vec::new(),
+        };
+    }
+    let plan = crate::studio_catalog::capture_paths_6band(
+        rig,
+        sources,
+        mics,
+        surfaces,
+        4,
+        crate::studio_catalog::Timing::AlignDirect,
+    );
+    let fdn_opt = build_closed_room_fdn(rate, rig, surfaces, &plan);
+    let early = if preserve_tail {
+        let extra_tail_s = if fdn_opt.is_some() { 1.25 } else { 0.0 };
+        crate::studio_catalog::render_capture_6band_with_tail(input, rate, &plan, extra_tail_s)
+    } else {
+        crate::studio_catalog::render_capture_6band(input, rate, &plan)
+    };
+    let mut left = early.clone();
+    let mut right = early;
+    if let Some(mut fdn) = fdn_opt {
+        for i in 0..left.len() {
+            let dry_s = input.get(i).copied().unwrap_or(0.0);
+            let clean = if dry_s.is_finite() {
+                f64::from(dry_s)
+            } else {
+                0.0
+            };
+            let [late_l, late_r] = fdn.tick_stereo(clean);
+            if late_l.is_finite() {
+                left[i] += late_l as f32;
+            }
+            if late_r.is_finite() {
+                right[i] += late_r as f32;
+            }
+        }
+    }
+    if !apply_mic_eq {
+        return StereoAudio { left, right };
+    }
+    StereoAudio {
+        left: apply_stage3_mic_response(&left, rate, rig, mics, &plan, preamp_drive),
+        right: apply_stage3_mic_response(&right, rate, rig, mics, &plan, preamp_drive),
+    }
+}
+
+/// Render a dry performance through the active `StudioRig` using the exact 6-band image-source
+/// acoustic model across all 6 room faces (`[-X, +X, -Y, +Y, floor, ceiling]`), ISO 9613-1 air
+/// absorption, JCA oblique porous reflections, LR4 24 dB/oct reflected band crossover, cubic
+/// Lagrange fractional delays, energy-preserving Householder FDN late room tail (closed rooms),
+/// source radiation, mic position, 3D mic aim, frequency-dependent polar pickup, spherical-wave
+/// proximity effect, and digitized-FR minimum-phase (or parametric) mic EQ.
+/// Direct arrival stays sample-aligned with input. No implicit normalization, limiter, or dither.
+pub fn render_studio_rig_with_mic_eq(
+    input: &[f32],
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    sources: &[crate::studio_catalog::SourceEntry],
+    mics: &[crate::studio_catalog::MicEntry],
+    surfaces: &[crate::studio_catalog::SurfaceEntry],
+    apply_mic_eq: bool,
+) -> Vec<f32> {
+    render_studio_rig_with_options(
+        input,
+        rate,
+        rig,
+        sources,
+        mics,
+        surfaces,
+        apply_mic_eq,
+        0.0,
+        false,
+    )
+}
+
+/// Render a dry performance through the active `StudioRig` preserving the full physical
+/// early-reflection + Eyring FDN decay tail (for un-truncated offline WAV export).
+pub fn render_studio_rig_with_tail(
+    input: &[f32],
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    sources: &[crate::studio_catalog::SourceEntry],
+    mics: &[crate::studio_catalog::MicEntry],
+    surfaces: &[crate::studio_catalog::SurfaceEntry],
+    apply_mic_eq: bool,
+) -> Vec<f32> {
+    render_studio_rig_with_options(
+        input,
+        rate,
+        rig,
+        sources,
+        mics,
+        surfaces,
+        apply_mic_eq,
+        0.0,
+        true,
+    )
 }
 
 /// Render a dry performance through the active `StudioRig` with the selected mic profile applied.
@@ -917,6 +1138,9 @@ pub fn render_analog_circuit(dry: &[f32], rate: u32) -> Vec<f32> {
             let abs_x = (x_filt * drive).abs();
             let coeff = if abs_x > sag_env { attack_a } else { release_a };
             sag_env = coeff * sag_env + (1.0 - coeff) * abs_x;
+            if sag_env < 1e-30 {
+                sag_env = 0.0;
+            }
             // Supply sag softly pulls gain down on strong transients (up to ~22%).
             let sag_gain = 1.0 / (1.0 + 0.32 * sag_env);
             let driven = x_filt * drive * sag_gain;

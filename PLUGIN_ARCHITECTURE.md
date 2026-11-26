@@ -115,3 +115,34 @@ Display-only workstation settings (dock positions, window sizes, zoom, 3D camera
 2. **No stage coupling**: Toggling Stage 3 (Mic) must never implicitly alter Stage 4 (Room) or Stage 5 (Plugin), and vice versa.
 3. **Dry-first**: Stages 3–5 always consume the Stage 1/2 dry signal; bypassing Stages 3–5 returns the Stage 1/2 dry signal unchanged.
 4. **Display isolation**: Editor UI actions (resizing plugin window, zooming, orbiting 3D room view, toggling polar overlay) must never dirty DAW automation parameters or alter rendered audio.
+
+---
+
+## 7. Standard DAW & Audio-Editor Interchange Layer (`spectracraft_mono::daw_bridge`)
+
+Until dedicated VST3/AU/AAX host binaries are compiled, SpectraCraft provides a thin, extensible interchange bridge in `spectracraft-mono/src/daw_bridge.rs` built on standard lossless WAV stems (24-bit PCM with TPDF dither or 32-bit IEEE float), sample-accurate timeline markers, and serialized `EngineStateSnapshot` preset chunks (`spectracraft-state.json`).
+
+### Thin Adapter Interface
+
+```rust
+pub trait EditorInterchangeAdapter {
+    fn target(&self) -> EditorTarget;
+    fn emit_editor_files(
+        &self,
+        out_dir: &Path,
+        ctx: &InterchangeWriteContext<'_>,
+    ) -> Result<Vec<WrittenAsset>>;
+}
+```
+
+### Built-In Editor Adapters
+
+| Adapter | Target ID | Generated Interchange Files |
+| --- | --- | --- |
+| `AdobeAuditionAdapter` | `audition` | `stems/*.wav`, `audition-markers.csv` (Audition Markers Panel TSV), `<session>.sesx` (Audition 1.9 XML multitrack session), `spectracraft-state.json` |
+| `LogicProAdapter` | `logic` | `stems/*.wav`, `logic-markers.csv` (timecode + sample-accurate CSV), `logic-interchange.json` (tracks + markers + embedded AU `EngineStateSnapshot`), `spectracraft-state.json` |
+| `GenericDawAdapter` | `daw` | `stems/*.wav`, `markers.csv` (RFC-4180 CSV), `daw-interchange.json`, `spectracraft-state.json` |
+| `SoundCraftAdapter` | `soundcraft` | `Audio Files/*.wav`, `<session>.scraft.json` (aligned with ArtCraft `craft-scraft-format`: `Source`, `FileFormat::Wav`, `TrackKind::Audio`, `MemoryLocation`), `spectracraft-state.json` |
+
+All files are written crash-safely via `craft-atomic` (`pipeline::write_wav_*_atomic` and `report_export::atomic_write_bytes`) and recorded with SHA-256 digests in `interchange-receipt.json` (`original_audio_opened: false`). New DAWs or editors can be supported by implementing `EditorInterchangeAdapter` and passing it to `export_with_adapter` without touching Stages 1–5 DSP.
+

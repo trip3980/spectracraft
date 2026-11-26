@@ -191,16 +191,14 @@ pub fn fill(
 pub fn repair_wav(input: &Path, output: &Path, start: usize, end: usize) -> Result<()> {
     let mut reader = hound::WavReader::open(input)?;
     let spec = reader.spec();
-    if spec.sample_format != hound::SampleFormat::Float
-        || spec.bits_per_sample != 32
-        || !(1..=2).contains(&spec.channels)
-        || reader.duration() > spec.sample_rate.saturating_mul(600)
-    {
+    if spec.sample_format != hound::SampleFormat::Float || spec.bits_per_sample != 32 {
         return Err("Expected float32 mono/stereo WAV, at most 600 seconds".into());
     }
-    let x = reader
-        .samples::<f32>()
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let initial_cap = crate::validate_wav_spec(spec, reader.duration(), 600, true)?;
+    let mut x = Vec::with_capacity(initial_cap.saturating_mul(spec.channels as usize));
+    for sample in reader.samples::<f32>() {
+        x.push(sample?);
+    }
     let (y, status) = fill(
         &x,
         spec.sample_rate,

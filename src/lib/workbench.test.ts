@@ -5,6 +5,7 @@ import {
   buildVariantSelection,
   computeEffectiveLayerGains,
   countUncertainOverlaps,
+  defaultGapRepairStartS,
   formatDbfs,
   formatHz,
   sliceMonoWavBuffer,
@@ -75,6 +76,11 @@ test('layer mixer gain math respects solo, mute, and fixed headroom', () => {
   assert.equal(soloed.pitch, 0.707);
   assert.equal(soloed.texture, 0);
   assert.equal(soloed.breath_accent, 0);
+
+  const withoutTexture = computeEffectiveLayerGains(base, 0.707, false);
+  assert.equal(withoutTexture.pitch, 0.707);
+  assert.equal(withoutTexture.texture, 0);
+  assert.equal(withoutTexture.breath_accent, 0.707);
 });
 
 test('sliceMonoWavBuffer extracts exact float32 window without mutating source', () => {
@@ -172,4 +178,56 @@ test('countUncertainOverlaps counts only uncertain frames inside note span', () 
   ];
   assert.equal(countUncertainOverlaps(1.1, 1.8, frames), 2);
   assert.equal(countUncertainOverlaps(3.0, 4.0, frames), 0);
+});
+
+test('defaultGapRepairStartS always produces a valid Rust gap-repair start for short and long clips', () => {
+  const shortStart = defaultGapRepairStartS(4.0, null, 2.0);
+  assert.equal(shortStart, 1.6);
+  assert.equal(validateGapRepairRange(48000, 48000 * 4, shortStart, 2.0).ok, true);
+
+  const longStart = defaultGapRepairStartS(35.0, null, 2.0);
+  assert.equal(longStart, 12.0);
+  assert.equal(validateGapRepairRange(48000, 48000 * 35, longStart, 2.0).ok, true);
+
+  const selNearStart = defaultGapRepairStartS(4.0, [0.005, 0.5], 2.0);
+  assert.equal(validateGapRepairRange(48000, 48000 * 4, selNearStart, 2.0).ok, true);
+
+  const selNearEnd = defaultGapRepairStartS(4.0, [3.99, 4.0], 2.0);
+  assert.equal(validateGapRepairRange(48000, 48000 * 4, selNearEnd, 2.0).ok, true);
+});
+
+test('validateMonoWavHeader accepts valid mono WAV and rejects stereo, bad rate, or malformed headers', async () => {
+  const { validateMonoWavHeader } = await import('./workbench');
+  const valid = makeTestFloatWav(48000, [0.1, -0.1, 0.2, -0.2]);
+  const ok = validateMonoWavHeader(valid);
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.sampleRate, 48000);
+    assert.equal(ok.samples, 4);
+  }
+
+  // Stereo WAV must be rejected
+  const stereo = new Uint8Array(valid);
+  new DataView(stereo.buffer).setUint16(22, 2, true);
+  assert.equal(validateMonoWavHeader(stereo).ok, false);
+
+  // Out-of-range sample rate must be rejected
+  const badRate = new Uint8Array(valid);
+  new DataView(badRate.buffer).setUint32(24, 192000, true);
+  assert.equal(validateMonoWavHeader(badRate).ok, false);
+
+  // Non-WAV payload must be rejected
+  const notWav = new Uint8Array(64);
+  assert.equal(validateMonoWavHeader(notWav).ok, false);
+});
+
+test('sanitizeClientErrorMessage strips internal paths and stack lines', async () => {
+  const { sanitizeClientErrorMessage } = await import('./workbench');
+  const leaked =
+    'ENOENT: no such file /tmp/spectracraft-sessions/upload-123/source.wav\n    at Object.openSync (/app/applet/server.ts:484:12)';
+  const cleaned = sanitizeClientErrorMessage(leaked, ['/app/applet', '/tmp/spectracraft-sessions']);
+  assert.ok(!cleaned.includes('/tmp/spectracraft-sessions'));
+  assert.ok(!cleaned.includes('/app/applet'));
+  assert.ok(!cleaned.includes('at Object.openSync'));
+  assert.ok(cleaned.includes('<path>'));
 });

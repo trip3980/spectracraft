@@ -1,10 +1,12 @@
 pub mod acoustic_math;
+pub mod acoustics_physics;
 pub mod attack_guard;
 #[cfg(feature = "bench")]
 pub mod bench;
 pub mod capture;
 pub mod continuation;
 pub mod cue_passes;
+pub mod daw_bridge;
 pub mod digest;
 pub mod dsp;
 pub mod edge;
@@ -22,11 +24,17 @@ pub mod qa;
 pub mod reference_profiles;
 pub mod region_edit;
 pub mod reperform;
+pub mod report_export;
+pub mod research_diagnostics;
 #[cfg(feature = "bench")]
 pub mod room_bench;
+pub mod settings_store;
 pub mod shape_profile;
-mod string_state;
+pub mod string_state;
 pub mod studio_catalog;
+pub mod technical_report;
+pub mod translation_layer;
+pub mod update_manager;
 pub mod workspace;
 use rustfft::{num_complex::Complex, FftPlanner};
 use serde::{Deserialize, Serialize};
@@ -73,26 +81,64 @@ fn valid_rate(rate: u32) -> bool {
     (8_000..=96_000).contains(&rate)
 }
 
+/// Validate a WAV header before decoding and return a safe capped initial `Vec` capacity
+/// so crafted headers with huge declared durations or invalid bit depths cannot overflow or OOM.
+pub fn validate_wav_spec(
+    spec: hound::WavSpec,
+    duration_frames: u32,
+    max_seconds: u32,
+    allow_stereo: bool,
+) -> Result<usize> {
+    let channel_ok = if allow_stereo {
+        (1..=2).contains(&spec.channels)
+    } else {
+        spec.channels == 1
+    };
+    if !channel_ok || !valid_rate(spec.sample_rate) {
+        return Err(if allow_stereo {
+            "Expected a mono or stereo WAV at 8–96 kHz".into()
+        } else {
+            "Expected mono WAV at 8–96 kHz".into()
+        });
+    }
+    let bits_ok = match spec.sample_format {
+        hound::SampleFormat::Float => spec.bits_per_sample == 32,
+        hound::SampleFormat::Int => matches!(spec.bits_per_sample, 8 | 16 | 24 | 32),
+    };
+    if !bits_ok {
+        return Err(format!(
+            "Unsupported WAV sample format ({:?}, {}-bit)",
+            spec.sample_format, spec.bits_per_sample
+        )
+        .into());
+    }
+    let max_frames = u64::from(spec.sample_rate) * u64::from(max_seconds);
+    if u64::from(duration_frames) > max_frames {
+        return Err(format!("WAV exceeds maximum duration of {max_seconds} seconds").into());
+    }
+    // Cap upfront allocation to <= 10 seconds of frames so a truncated/crafted header cannot force huge RAM allocation before EOF.
+    let cap_frames = u64::from(duration_frames).min(u64::from(spec.sample_rate) * 10);
+    Ok(cap_frames as usize)
+}
+
 pub fn load_wav(path: &Path) -> Result<(u32, Vec<f32>)> {
     let mut wav = hound::WavReader::open(path)?;
     let s = wav.spec();
-    if s.channels != 1 || !valid_rate(s.sample_rate) {
-        return Err("Expected mono WAV at 8–96 kHz".into());
-    }
-    if wav.duration() as usize > s.sample_rate as usize * MAX_SECONDS {
-        return Err("This prototype supports up to 30 seconds".into());
-    }
-    let x = match s.sample_format {
-        hound::SampleFormat::Float => wav
-            .samples::<f32>()
-            .collect::<std::result::Result<Vec<_>, _>>()?,
+    let initial_cap = validate_wav_spec(s, wav.duration(), MAX_SECONDS as u32, false)?;
+    let mut x = Vec::with_capacity(initial_cap);
+    match s.sample_format {
+        hound::SampleFormat::Float => {
+            for sample in wav.samples::<f32>() {
+                x.push(sample?);
+            }
+        }
         hound::SampleFormat::Int => {
             let scale = 2_f32.powi(i32::from(s.bits_per_sample) - 1);
-            wav.samples::<i32>()
-                .map(|n| n.map(|v| v as f32 / scale))
-                .collect::<std::result::Result<Vec<_>, _>>()?
+            for sample in wav.samples::<i32>() {
+                x.push(sample? as f32 / scale);
+            }
         }
-    };
+    }
     if x.is_empty() || x.iter().any(|v| !v.is_finite() || v.abs() > 4.) {
         return Err("Invalid or unsupported mono audio".into());
     }
@@ -490,5 +536,38 @@ mod tests {
         assert!(synthesize(&m, 9).is_err());
         assert!(analyze(&[f32::NAN], 48000).is_err());
         assert!(analyze(&[0.], 200).is_err());
+    }
+
+    #[test]
+    fn validate_wav_spec_rejects_bad_bit_depths_and_caps_initial_allocation() {
+        let bad_zero = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 0,
+            sample_format: hound::SampleFormat::Int,
+        };
+        assert!(validate_wav_spec(bad_zero, 48_000, 30, true).is_err());
+
+        let bad_float = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 64,
+            sample_format: hound::SampleFormat::Float,
+        };
+        assert!(validate_wav_spec(bad_float, 48_000, 30, true).is_err());
+
+        let valid_long = hound::WavSpec {
+            channels: 2,
+            sample_rate: 96_000,
+            bits_per_sample: 24,
+            sample_format: hound::SampleFormat::Int,
+        };
+        // 600 s accepted, initial pre-allocation capped to 10 s of frames (960_000)
+        assert_eq!(
+            validate_wav_spec(valid_long, 96_000 * 600, 600, true).unwrap(),
+            960_000
+        );
+        // 601 s rejected without u32 overflow
+        assert!(validate_wav_spec(valid_long, 96_000 * 601, 600, true).is_err());
     }
 }

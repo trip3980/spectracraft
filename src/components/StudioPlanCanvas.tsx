@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import {
   aimDirectionFromAngles,
   getMicWorldPosM,
@@ -27,11 +26,6 @@ interface StudioPlanCanvasProps {
   /** Controlled spatial mode (plans | 3d | split) for workspace layout persistence. */
   spatialMode?: SpatialDisplayLayout;
   onChangeSpatialMode?: (mode: SpatialDisplayLayout) => void;
-  isFloating?: boolean;
-  canMoveLeft?: boolean;
-  canMoveRight?: boolean;
-  onMovePane?: (dir: -1 | 1) => void;
-  onToggleFloat?: () => void;
 }
 
 type Projection3D = 'perspective' | 'orthographic';
@@ -62,11 +56,6 @@ export function StudioPlanCanvas({
   onToggleGridSnap,
   spatialMode,
   onChangeSpatialMode,
-  isFloating = false,
-  canMoveLeft = false,
-  canMoveRight = false,
-  onMovePane,
-  onToggleFloat,
 }: StudioPlanCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -154,7 +143,7 @@ export function StudioPlanCanvas({
       drawInto(canvasRef.current, 'plans');
       drawInto(canvas3dRef.current, '3d');
     }
-  });
+  }, [rig, sourceSymbol, mode, camera, projection, planZoom, planPanX, resizeTick, catalogs]);
 
   const snapIfNeeded = (valM: number, shiftKey: boolean): number => {
     if (!rig.gridSnap || shiftKey) return valM;
@@ -445,41 +434,6 @@ export function StudioPlanCanvas({
             />
             <span>Snap</span>
           </label>
-          {!isFloating && onMovePane && (
-            <div className="flex items-center gap-0.5 border-l border-[#3e3e3e] pl-1">
-              <button
-                type="button"
-                disabled={!canMoveLeft}
-                onClick={() => onMovePane(-1)}
-                title="Move Room Views panel left (visual only)"
-                aria-label="Move Room Views left"
-                className="p-0.5 text-[#a6a6a6] hover:text-white disabled:opacity-25"
-              >
-                <ChevronLeft className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                disabled={!canMoveRight}
-                onClick={() => onMovePane(1)}
-                title="Move Room Views panel right (visual only)"
-                aria-label="Move Room Views right"
-                className="p-0.5 text-[#a6a6a6] hover:text-white disabled:opacity-25"
-              >
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-          {!isFloating && onToggleFloat && (
-            <button
-              type="button"
-              onClick={onToggleFloat}
-              title="Undock Room Views into floating window (visual only)"
-              aria-label="Undock Room Views"
-              className="p-0.5 text-[#a6a6a6] hover:text-white"
-            >
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          )}
         </div>
       </div>
 

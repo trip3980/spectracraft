@@ -284,8 +284,7 @@ pub fn extract_reference_shape(
     let mut notes_with_bends = 0_usize;
     let mut out_of_published_range_notes = 0_usize;
 
-    let pub_lo = selected_source
-        .and_then(|s| s.published_range_hz.map(|(lo, _)| f64::from(lo)));
+    let pub_lo = selected_source.and_then(|s| s.published_range_hz.map(|(lo, _)| f64::from(lo)));
     let pub_hi = selected_source.and_then(|s| {
         s.published_practical_range_hz
             .or(s.published_range_hz)
@@ -357,7 +356,11 @@ pub fn extract_reference_shape(
 
     let pitch_trajectory = PitchTrajectoryShape {
         note_count: notes.len(),
-        min_hz: if min_hz.is_finite() { Some(min_hz) } else { None },
+        min_hz: if min_hz.is_finite() {
+            Some(min_hz)
+        } else {
+            None
+        },
         max_hz: if max_hz > 0.0 { Some(max_hz) } else { None },
         median_hz,
         max_bend_semitones,
@@ -392,11 +395,7 @@ pub fn extract_reference_shape(
     let mut strongest: Option<(usize, f64)> = None;
     let mut quietest: Option<(usize, f64)> = None;
     for (idx, note) in notes.iter().enumerate() {
-        let p = note
-            .level_steps
-            .iter()
-            .copied()
-            .fold(0.0_f64, f64::max);
+        let p = note.level_steps.iter().copied().fold(0.0_f64, f64::max);
         if p > 1e-6 {
             if strongest.is_none_or(|(_, best)| p > best) {
                 strongest = Some((idx, p));
@@ -449,7 +448,8 @@ pub fn extract_reference_shape(
     }
     .to_string();
 
-    let non_silence = (summary.supported_frames + summary.uncertain_frames + summary.out_of_target_frames).max(1);
+    let non_silence =
+        (summary.supported_frames + summary.uncertain_frames + summary.out_of_target_frames).max(1);
     let out_frac = summary.out_of_target_frames as f64 / non_silence as f64;
     let unc_frac = summary.uncertain_frames as f64 / non_silence as f64;
     // Treat a frame as competing multi-source / bleed energy only when the primary
@@ -694,10 +694,7 @@ pub fn extract_reference_shape(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        reperform::analyze_guitar,
-        studio_catalog::source_catalog,
-    };
+    use crate::{reperform::analyze_guitar, studio_catalog::source_catalog};
 
     #[test]
     fn reference_shape_extracts_all_descriptors_and_holds_shape_hash_fixed_across_sources() {
@@ -711,7 +708,10 @@ mod tests {
             let hz = 220.0 + 27.0 * (t / 1.0).clamp(0.0, 1.0);
             phase1 += TAU * hz / f64::from(rate);
             let env = (t / 0.015).min(1.0) * (-2.2 * t).exp();
-            *s += (0.35 * env * (phase1.sin() + 0.4 * (2.0 * phase1).sin() + 0.2 * (3.0 * phase1).sin())) as f32;
+            *s += (0.35
+                * env
+                * (phase1.sin() + 0.4 * (2.0 * phase1).sin() + 0.2 * (3.0 * phase1).sin()))
+                as f32;
         }
         let mut phase2 = 0.0_f64;
         for (i, s) in x.iter_mut().enumerate().skip((rate as f64 * 0.9) as usize) {
@@ -727,8 +727,7 @@ mod tests {
         let src_b = sources
             .iter()
             .find(|s| {
-                s.name.contains("Piccolo")
-                    || s.published_range_hz.is_some_and(|(lo, _)| lo > 400.0)
+                s.name.contains("Piccolo") || s.published_range_hz.is_some_and(|(lo, _)| lo > 400.0)
             })
             .unwrap_or(&sources[1]);
 
@@ -745,8 +744,14 @@ mod tests {
         // Selecting a high-pitched source flags out-of-range notes WITHOUT dropping or clamping them
         if src_b.published_range_hz.is_some_and(|(lo, _)| lo > 350.0) {
             assert!(shape_b.pitch_trajectory.out_of_published_range_notes >= 1);
-            assert_eq!(shape_b.pitch_trajectory.note_count, shape_a.pitch_trajectory.note_count);
-            assert_eq!(shape_b.pitch_trajectory.min_hz, shape_a.pitch_trajectory.min_hz);
+            assert_eq!(
+                shape_b.pitch_trajectory.note_count,
+                shape_a.pitch_trajectory.note_count
+            );
+            assert_eq!(
+                shape_b.pitch_trajectory.min_hz,
+                shape_a.pitch_trajectory.min_hz
+            );
         }
     }
 

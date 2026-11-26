@@ -71,7 +71,10 @@ pub fn intensity_ratio_to_db(ratio: f64) -> Option<f64> {
 
 /// Free-field inverse-square pressure ratio `r_ref / r` (intensity scales as `(r_ref / r)²`).
 pub fn inverse_square_pressure_ratio(distance_m: f64, reference_m: f64) -> f64 {
-    if !distance_m.is_finite() || !reference_m.is_finite() || distance_m <= 1e-6 || reference_m <= 0.0
+    if !distance_m.is_finite()
+        || !reference_m.is_finite()
+        || distance_m <= 1e-6
+        || reference_m <= 0.0
     {
         return 1.0;
     }
@@ -220,9 +223,10 @@ pub fn evaluate_direct_mic_trigonometry(
         .max(0.20);
     // Unit vector pointing from mic toward source (incoming direct wave direction)
     let to_src = [-off[0] / dist, -off[1] / dist, -off[2] / dist];
-    let aim_len = (aim_unit[0] * aim_unit[0] + aim_unit[1] * aim_unit[1] + aim_unit[2] * aim_unit[2])
-        .sqrt()
-        .max(1e-9);
+    let aim_len =
+        (aim_unit[0] * aim_unit[0] + aim_unit[1] * aim_unit[1] + aim_unit[2] * aim_unit[2])
+            .sqrt()
+            .max(1e-9);
     let aim_norm = [
         aim_unit[0] / aim_len,
         aim_unit[1] / aim_len,
@@ -452,7 +456,9 @@ pub fn analyze_studio_rig(
             face_label: FACE_LABELS[f].to_owned(),
             active,
             surface_index: surf_idx,
-            surface_name: surf.map(|s| s.name.clone()).unwrap_or_else(|| "Unknown".to_owned()),
+            surface_name: surf
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "Unknown".to_owned()),
             area_m2: area,
             raw_absorption_6band: raw_6,
             effective_absorption_6band: eff_6,
@@ -729,12 +735,21 @@ mod tests {
         // Axial room modes: 3.43 m dimension -> 1st mode = 50 Hz, 2nd mode = 100 Hz
         let modes = axial_room_modes([3.43, 6.86, 3.43], 343.0, 2);
         assert!((modes[0].freq_hz - 25.0).abs() < 1e-9); // Y 1st mode
-        assert!(modes.iter().any(|m| m.axis_key == "X" && m.harmonic == 1 && (m.freq_hz - 50.0).abs() < 1e-9));
-        assert!(modes.iter().any(|m| m.axis_key == "X" && m.harmonic == 2 && (m.freq_hz - 100.0).abs() < 1e-9));
+        assert!(modes
+            .iter()
+            .any(|m| m.axis_key == "X" && m.harmonic == 1 && (m.freq_hz - 50.0).abs() < 1e-9));
+        assert!(modes
+            .iter()
+            .any(|m| m.axis_key == "X" && m.harmonic == 2 && (m.freq_hz - 100.0).abs() < 1e-9));
 
         // 3:1 rule level diff ≈ 9.542 dB
         assert!((distance_ratio_level_diff_db(3.0, 1.0) - 9.542425).abs() < 1e-4);
-        assert!((three_to_one_min_distance_m(2.0 * f64::from(FEET_TO_METRES)) - 6.0 * f64::from(FEET_TO_METRES)).abs() < 1e-6);
+        assert!(
+            (three_to_one_min_distance_m(2.0 * f64::from(FEET_TO_METRES))
+                - 6.0 * f64::from(FEET_TO_METRES))
+            .abs()
+                < 1e-6
+        );
         assert_eq!(xy_clamped_angle_deg(60.0), 90.0);
         assert_eq!(xy_clamped_angle_deg(150.0), 135.0);
     }
@@ -759,7 +774,10 @@ mod tests {
             a_steel.sabine_rt60_overall_s.unwrap() > a_base.sabine_rt60_overall_s.unwrap(),
             "swapping foam wall for steel must raise estimated RT60"
         );
-        assert_eq!(a_base.direct_path.distance_m, a_steel.direct_path.distance_m);
+        assert_eq!(
+            a_base.direct_path.distance_m,
+            a_steel.direct_path.distance_m
+        );
         assert_eq!(
             a_base.direct_path.direct_delay_ms,
             a_steel.direct_path.direct_delay_ms
@@ -793,7 +811,10 @@ mod tests {
         let a_aimed = analyze_studio_rig(&aimed, &sources, &mics, &surfaces);
 
         assert_eq!(aimed.active_mic().offset_m, base.active_mic().offset_m);
-        assert_eq!(a_aimed.direct_path.distance_m, a_base.direct_path.distance_m);
+        assert_eq!(
+            a_aimed.direct_path.distance_m,
+            a_base.direct_path.distance_m
+        );
         assert!((a_aimed.direct_path.off_axis_deg - 90.0).abs() < 0.5);
         assert!(a_aimed.direct_path.polar_gain_linear < a_base.direct_path.polar_gain_linear - 0.3);
 
@@ -822,10 +843,22 @@ mod tests {
 
         let a_short = analyze_studio_rig(&rig, &sources, &mics, &surfaces);
         assert!(a_short.placement_guidance.multi_mic_active);
-        assert!((a_short.placement_guidance.three_to_one_min_distance_m - 6.0 * f64::from(FEET_TO_METRES)).abs() < 1e-4);
+        assert!(
+            (a_short.placement_guidance.three_to_one_min_distance_m
+                - 6.0 * f64::from(FEET_TO_METRES))
+            .abs()
+                < 1e-4
+        );
         assert_eq!(a_short.placement_guidance.slots[0].meets_three_to_one, None);
-        assert_eq!(a_short.placement_guidance.slots[1].meets_three_to_one, Some(false));
-        assert!((a_short.placement_guidance.slots[1].shortfall_m - 3.0 * f64::from(FEET_TO_METRES)).abs() < 1e-3);
+        assert_eq!(
+            a_short.placement_guidance.slots[1].meets_three_to_one,
+            Some(false)
+        );
+        assert!(
+            (a_short.placement_guidance.slots[1].shortfall_m - 3.0 * f64::from(FEET_TO_METRES))
+                .abs()
+                < 1e-3
+        );
 
         let mut impulse = vec![0.0_f32; 4800];
         impulse[40] = 0.8;
@@ -835,12 +868,20 @@ mod tests {
         rig.mics[1].offset_m = [0.0, 6.0 * FEET_TO_METRES, 0.0];
         rig.clamp_all();
         let a_clear = analyze_studio_rig(&rig, &sources, &mics, &surfaces);
-        assert_eq!(a_clear.placement_guidance.slots[1].meets_three_to_one, Some(true));
+        assert_eq!(
+            a_clear.placement_guidance.slots[1].meets_three_to_one,
+            Some(true)
+        );
         assert!(a_clear.placement_guidance.slots[1].shortfall_m < 1e-6);
-        assert!((a_clear.placement_guidance.slots[1].level_diff_vs_nearest_db - 9.5424).abs() < 0.02);
+        assert!(
+            (a_clear.placement_guidance.slots[1].level_diff_vs_nearest_db - 9.5424).abs() < 0.02
+        );
 
         let y_clear = render_studio_rig(&impulse, 48000, &rig, &sources, &mics, &surfaces);
-        assert_ne!(y_short, y_clear, "moving Mic 2 to 6 ft must change rendered capture");
+        assert_ne!(
+            y_short, y_clear,
+            "moving Mic 2 to 6 ft must change rendered capture"
+        );
 
         // ORTF preset: 17 cm spacing, ±55° splayed cardioid capsules
         let mut ortf = rig.clone();
@@ -852,7 +893,9 @@ mod tests {
         ortf.mics[1].aim.heading_z_deg = 55.0;
         ortf.clamp_all();
         let a_ortf = analyze_studio_rig(&ortf, &sources, &mics, &surfaces);
-        assert!((a_ortf.placement_guidance.slots[1].distance_from_nearest_mic_m - 0.17).abs() < 1e-4);
+        assert!(
+            (a_ortf.placement_guidance.slots[1].distance_from_nearest_mic_m - 0.17).abs() < 1e-4
+        );
         let y_ortf = render_studio_rig(&impulse, 48000, &ortf, &sources, &mics, &surfaces);
         assert_ne!(y_ortf, y_clear);
     }

@@ -506,38 +506,6 @@ export interface RustAcousticAnalysis {
   estimate_disclaimer: string;
 }
 
-export interface RustCaptureResult {
-  runId: string;
-  wavUrl: string;
-  sha256: string;
-  samples: number;
-  sample_rate: number;
-  peak_dbfs: number | null;
-  rms_dbfs: number | null;
-  speed_of_sound_mps: number;
-  distance_m: number;
-  direct_delay_ms: number;
-  direct_pickup_gain: number;
-  first_reflection_ms: number | null;
-  last_path_ms: number;
-  path_count: number;
-  six_band_drr_db: (number | null)[];
-  source_pos_m: [number, number, number];
-  active_mic_pattern: PolarPattern;
-  active_mic_pattern_label: string;
-  room_preset: RoomPresetKey;
-  effective_faces: {
-    face: string;
-    active: boolean;
-    surface_index: number;
-    surface_name: string;
-    raw_absorption_6band: number[];
-    effective_absorption_6band: number[];
-    pressure_reflectance_6band: number[];
-  }[];
-  acoustic_analysis?: RustAcousticAnalysis;
-}
-
 export interface HistoryStack<T> {
   past: T[];
   present: T;

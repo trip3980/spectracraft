@@ -3,9 +3,11 @@ use crate::{dsp, valid_rate, Result};
 use rustfft::{num_complex::Complex, FftPlanner};
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     f64::consts::{PI, TAU},
     path::Path,
+    sync::OnceLock,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +73,8 @@ pub struct Performance {
 #[serde(deny_unknown_fields)]
 pub struct Note {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub string_id: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub re_picks: Option<Vec<Strike>>,
     pub start: f64,
     pub end: f64,
@@ -105,47 +109,162 @@ fn interp(x: &[f64], t: f64) -> f64 {
     x[i] + a * (x[i + 1] - x[i])
 }
 
+fn smooth_kernel() -> &'static [f64; 17] {
+    static KERNEL: OnceLock<[f64; 17]> = OnceLock::new();
+    KERNEL.get_or_init(|| {
+        let mut weights = [0.0_f64; 17];
+        let mut sum = 0.0_f64;
+        for (j, slot) in weights.iter_mut().enumerate() {
+            let k = j as i32 - 8;
+            let w = (-f64::from(k * k) / 8.0).exp();
+            *slot = w;
+            sum += w;
+        }
+        let inv_sum = 1.0 / sum;
+        for w in &mut weights {
+            *w *= inv_sum;
+        }
+        weights
+    })
+}
+
 fn smooth(x: &[f64]) -> Vec<f64> {
-    let kernel: Vec<_> = (-8_i32..=8)
-        .map(|k| (-f64::from(k * k) / 8.).exp())
-        .collect();
-    let sum = kernel.iter().sum::<f64>();
+    let kernel = smooth_kernel();
     let len = x.len() as isize;
+    let period = 2 * len;
     (0..x.len())
         .map(|i| {
-            kernel
-                .iter()
-                .enumerate()
-                .map(|(j, w)| {
-                    let k = (i as isize + j as isize - 8).rem_euclid(2 * len);
-                    w * x[if k < len { k } else { 2 * len - 1 - k } as usize]
-                })
-                .sum::<f64>()
-                / sum
+            let base = i as isize - 8;
+            let mut acc = 0.0_f64;
+            for (j, &w) in kernel.iter().enumerate() {
+                let k = (base + j as isize).rem_euclid(period);
+                let idx = if k < len { k } else { period - 1 - k } as usize;
+                acc += w * x[idx];
+            }
+            acc
         })
         .collect()
 }
 
-fn build_note_modes(note: &Note, median: f64) -> Vec<(f64, f64, f64)> {
-    let fret = (median / 330.).clamp(1., 2.7);
-    let pick = (0.175 * fret).clamp(0.16, 0.36);
-    let pickup = (0.145 * fret).clamp(0.11, 0.275);
-    (1..20)
-        .map(|k| {
-            let h = k as f64;
-            let sinc = PI * 0.029 * h;
-            let w =
-                (PI * h * pick).sin() * (PI * h * pickup).sin() * sinc.sin() / sinc / h.powf(0.91)
-                    * note.shape.mode_weights.get(&k).copied().unwrap_or(1.);
-            let d = note
-                .shape
-                .decay_per_second
-                .get(&k)
-                .copied()
-                .unwrap_or(0.71 + 0.39 * h.powf(0.84));
-            (h, w, d)
-        })
-        .collect()
+fn median_of_slice(values: &[f64]) -> f64 {
+    let n = values.len();
+    debug_assert!(n > 0);
+    let mut scratch = values.to_vec();
+    let hi_idx = n / 2;
+    let (_, &mut hi, _) = scratch.select_nth_unstable_by(hi_idx, f64::total_cmp);
+    if n.is_multiple_of(2) {
+        let lo = scratch[..hi_idx]
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
+        (lo + hi) * 0.5
+    } else {
+        hi
+    }
+}
+
+fn build_string_mode_params(
+    note: &Note,
+    median: f64,
+    rate: f64,
+) -> crate::string_state::StringModeParams {
+    let (mut weights, mut decays, pickups) =
+        crate::string_state::default_string_mode_params(median);
+    for k in 1..=crate::string_state::MODE_COUNT {
+        let idx = k - 1;
+        if let Some(&w_mult) = note.shape.mode_weights.get(&k) {
+            weights[idx] *= w_mult;
+        }
+        if let Some(&d_override) = note.shape.decay_per_second.get(&k) {
+            decays[idx] = d_override;
+        }
+    }
+    crate::string_state::StringModeParams::new(weights, decays, pickups, rate)
+}
+
+fn validate_dry_note(
+    note: &Note,
+    samples: usize,
+    rate: f64,
+    hop_s: f64,
+    err_msg: &'static str,
+) -> Result<()> {
+    let duration_s = samples as f64 / rate;
+    if !(0. ..=duration_s).contains(&note.start)
+        || !note.end.is_finite()
+        || note.end <= note.start
+        || note.end > duration_s + hop_s
+        || note.hz.is_empty()
+        || note.hz.len() > 90_000
+        || note.level_steps.len() != note.hz.len()
+        || note.hz.iter().any(|v| !(20. ..=rate * 0.49).contains(v))
+        || note.level_steps.iter().any(|v| !(0. ..=4.).contains(v))
+        || note
+            .shape
+            .mode_weights
+            .iter()
+            .any(|(k, v)| !(1..20).contains(k) || !(0. ..=4.).contains(v))
+        || note
+            .shape
+            .decay_per_second
+            .iter()
+            .any(|(k, v)| !(1..20).contains(k) || !(0. ..=80.).contains(v))
+    {
+        return Err(err_msg.into());
+    }
+    Ok(())
+}
+
+/// Collect initial strike strength (`offset == 0`) and sorted mid-note re-picks
+/// indexed relative to `base_idx`.
+fn collect_note_repicks(
+    note: &Note,
+    count: usize,
+    rate: f64,
+    base_idx: usize,
+    strict_validate: bool,
+) -> Result<(f64, Vec<(usize, f64)>)> {
+    let mut initial_strength = 1.0_f64;
+    let mut mid_repicks: Vec<(usize, f64)> = Vec::new();
+    if let Some(strikes) = &note.re_picks {
+        if strict_validate && strikes.len() > 1024 {
+            return Err("Too many re-picks in one event".into());
+        }
+        mid_repicks.reserve(strikes.len());
+        let max_offset_s = (count - 1) as f64 / rate;
+        for strike in strikes {
+            if strict_validate
+                && (!(0. ..=max_offset_s).contains(&strike.offset_s)
+                    || !(0. ..=1.5).contains(&strike.strength))
+            {
+                return Err("Invalid re-pick".into());
+            }
+            let offset = ((strike.offset_s * rate).round() as usize).min(count - 1);
+            if offset == 0 {
+                initial_strength += strike.strength;
+            } else {
+                mid_repicks.push((base_idx + offset, strike.strength));
+            }
+        }
+        mid_repicks.sort_by_key(|&(idx, _)| idx);
+    }
+    Ok((initial_strength, mid_repicks))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum StringKey {
+    Physical(usize),
+    NoteDefault(usize),
+}
+
+struct PreparedDryNote<'a> {
+    start: usize,
+    end: usize,
+    hz: &'a [f64],
+    levels: Vec<f64>,
+    params: crate::string_state::StringModeParams,
+    initial_strength: f64,
+    mid_repicks: Vec<(usize, f64)>,
 }
 
 impl Performance {
@@ -203,7 +322,7 @@ impl Performance {
         }
     }
 
-    pub fn synthesize_dry(&self) -> Result<Vec<f32>> {
+    fn synthesize_dry_f64(&self) -> Result<Vec<f64>> {
         let rate = f64::from(self.rate);
         if !valid_rate(self.rate)
             || self.samples == 0
@@ -214,33 +333,20 @@ impl Performance {
             return Err("Invalid performance duration, rate, or cue spacing".into());
         }
         let mut y = vec![0.0_f64; self.samples];
-        let mut total = 0;
-        for note in &self.notes {
-            if !(0. ..=self.samples as f64 / rate).contains(&note.start)
-                || !note.end.is_finite()
-                || note.end <= note.start
-                || note.end > self.samples as f64 / rate + self.hop_s
-                || note.hz.is_empty()
-                || note.hz.len() > 90_000
-                || note.level_steps.len() != note.hz.len()
-                || note.hz.iter().any(|v| !(20. ..=rate * 0.49).contains(v))
-                || note.level_steps.iter().any(|v| !(0. ..=4.).contains(v))
-                || note
-                    .shape
-                    .mode_weights
-                    .iter()
-                    .any(|(k, v)| !(1..20).contains(k) || !(0. ..=4.).contains(v))
-                || note
-                    .shape
-                    .decay_per_second
-                    .iter()
-                    .any(|(k, v)| !(1..20).contains(k) || !(0. ..=80.).contains(v))
-            {
-                return Err("Invalid dry guitar event".into());
-            }
+        let mut total = 0usize;
+        let mut by_string: BTreeMap<StringKey, Vec<PreparedDryNote<'_>>> = BTreeMap::new();
+
+        for (note_idx, note) in self.notes.iter().enumerate() {
+            validate_dry_note(
+                note,
+                self.samples,
+                rate,
+                self.hop_s,
+                "Invalid dry guitar event",
+            )?;
             let start = (note.start * rate).round_ties_even() as usize;
             let end = ((note.end * rate).round_ties_even() as usize).min(self.samples);
-            let count = end - start;
+            let count = end.saturating_sub(start);
             total += count;
             if total > 4 * self.samples {
                 return Err("Too much overlapping synthesis".into());
@@ -248,59 +354,114 @@ impl Performance {
             if count < 10 {
                 continue;
             }
-            let pitches: Vec<_> = (0..count)
-                .map(|i| interp(&note.hz, (i as f64 / rate) / self.hop_s))
-                .collect();
-            let mut sorted = pitches.clone();
-            sorted.sort_by(f64::total_cmp);
-            let n = pitches.len();
-            let median = (sorted[n / 2] + sorted[(n - 1) / 2]) * 0.5;
+            let median = median_of_slice(&note.hz);
             let levels = smooth(&note.level_steps);
-            let modes = build_note_modes(note, median);
-            let mut modes_state: Vec<_> = modes
-                .iter()
-                .map(|&(h, w, d)| crate::string_state::Mode::new(h, w, d, rate))
-                .collect();
-            let mut kicks = Vec::new();
-            if let Some(strikes) = &note.re_picks {
-                if strikes.len() > 1024 {
-                    return Err("Too many re-picks in one event".into());
+            let params = build_string_mode_params(note, median, rate);
+            let (initial_strength, mid_repicks) =
+                collect_note_repicks(note, count, rate, start, true)?;
+
+            let key = note
+                .string_id
+                .map(StringKey::Physical)
+                .unwrap_or(StringKey::NoteDefault(note_idx));
+            by_string.entry(key).or_default().push(PreparedDryNote {
+                start,
+                end,
+                hz: &note.hz,
+                levels,
+                params,
+                initial_strength,
+                mid_repicks,
+            });
+        }
+
+        let inv_rate = 1.0 / rate;
+        let inv_rate_hop = inv_rate / self.hop_s;
+        let inv_attack = inv_rate / 0.008;
+        let inv_release = inv_rate / 0.018;
+
+        // One persistent StringState owned per physical string; independent strings sum cleanly.
+        for (_, mut notes_on_string) in by_string {
+            notes_on_string.sort_by_key(|n| n.start);
+            let mut state = crate::string_state::StringState::new();
+            let span_end = notes_on_string.iter().map(|n| n.end).max().unwrap_or(0);
+            let mut sample_idx = notes_on_string[0].start;
+            let mut next_note_start = 0usize;
+            let mut active_idx: Option<usize> = None;
+            let mut rp_cursors = vec![0usize; notes_on_string.len()];
+            let mut last_f = notes_on_string[0].hz[0];
+            let mut last_decays = notes_on_string[0].params.decays;
+
+            while sample_idx < span_end {
+                // Re-pick path: any note starting at sample_idx excites the string additively.
+                while next_note_start < notes_on_string.len()
+                    && notes_on_string[next_note_start].start == sample_idx
+                {
+                    let n = &notes_on_string[next_note_start];
+                    state.repick(n.initial_strength, &n.params.weights);
+                    active_idx = Some(next_note_start);
+                    next_note_start += 1;
                 }
-                kicks = vec![0.; count];
-                kicks[0] = 1.;
-                for strike in strikes {
-                    if !(0. ..=(count - 1) as f64 / rate).contains(&strike.offset_s)
-                        || !(0. ..=1.5).contains(&strike.strength)
-                    {
-                        return Err("Invalid re-pick".into());
+                if let Some(a) = active_idx {
+                    if sample_idx >= notes_on_string[a].end {
+                        active_idx = notes_on_string[..next_note_start]
+                            .iter()
+                            .rposition(|n| sample_idx >= n.start && sample_idx < n.end);
                     }
-                    kicks[(strike.offset_s * rate).round() as usize] += strike.strength;
                 }
-            }
-            let mut cycles = 0.;
-            for (i, sample) in y[start..end].iter_mut().enumerate() {
-                let t = i as f64 / rate;
-                let f = pitches[i];
-                cycles += f;
-                let phase = TAU * cycles / rate;
-                let envelope =
-                    (t / 0.008).min(1.) * (((count - 1 - i) as f64 / rate) / 0.018).min(1.);
-                let modal_sum = if kicks.is_empty() {
-                    modes
-                        .iter()
-                        .filter(|(h, _, _)| h * f < rate / 2.)
-                        .map(|(h, w, d)| w * (h * phase).sin() * (-d * t).exp())
-                        .sum::<f64>()
+
+                if let Some(a_idx) = active_idx {
+                    let note = &notes_on_string[a_idx];
+                    let i = sample_idx - note.start;
+                    let rem = note.end - 1 - sample_idx;
+                    let step_pos = i as f64 * inv_rate_hop;
+                    let f = interp(note.hz, step_pos);
+                    last_f = f;
+                    last_decays = note.params.decays;
+                    let envelope =
+                        (i as f64 * inv_attack).min(1.0) * (rem as f64 * inv_release).min(1.0);
+                    let modal_sum = state.tick_cached(
+                        f,
+                        rate,
+                        &note.params.sample_losses,
+                        &note.params.pickups,
+                    );
+                    y[sample_idx] += 1.53 * interp(&note.levels, step_pos) * envelope * modal_sum;
+                    let cursor = &mut rp_cursors[a_idx];
+                    while *cursor < note.mid_repicks.len()
+                        && note.mid_repicks[*cursor].0 == sample_idx
+                    {
+                        state.repick(note.mid_repicks[*cursor].1, &note.params.weights);
+                        *cursor += 1;
+                    }
+                    sample_idx += 1;
+                } else if next_note_start < notes_on_string.len() {
+                    let next_start = notes_on_string[next_note_start].start;
+                    state.decay_only(next_start - sample_idx, last_f, rate, &last_decays);
+                    sample_idx = next_start;
                 } else {
-                    modes_state
-                        .iter_mut()
-                        .map(|m| m.advance(f, rate, kicks[i]))
-                        .sum::<f64>()
-                };
-                *sample += 1.53 * interp(&levels, t / self.hop_s) * envelope * modal_sum;
+                    break;
+                }
             }
         }
+        Ok(y)
+    }
+
+    pub fn synthesize_dry(&self) -> Result<Vec<f32>> {
+        let y = self.synthesize_dry_f64()?;
         Ok(y.into_iter().map(|x| x as f32).collect())
+    }
+
+    /// Optional Stage 1 dry render with parallel two-biquad body resonance
+    /// (default: 70% dry + 20% ~100 Hz air cavity + 10% ~200 Hz top plate).
+    pub fn synthesize_dry_with_body_resonance(
+        &self,
+        body: &crate::string_state::BodyResonanceConfig,
+    ) -> Result<Vec<f32>> {
+        let mut buf = self.synthesize_dry_f64()?;
+        let mut resonator = crate::string_state::BodyResonator::new(f64::from(self.rate), *body);
+        resonator.process_buffer(&mut buf);
+        Ok(buf.into_iter().map(|x| x as f32).collect())
     }
 
     pub fn write_dry_wav(&self, path: &Path) -> Result<()> {
@@ -329,7 +490,10 @@ impl Performance {
         let kind = source.regen_model.family_kind;
         let default_voicing = voicing.is_neutral_default();
         if default_voicing
-            && matches!(kind, SourceRegenKind::Neutral | SourceRegenKind::PluckedElectric)
+            && matches!(
+                kind,
+                SourceRegenKind::Neutral | SourceRegenKind::PluckedElectric
+            )
         {
             return self.synthesize_dry();
         }
@@ -376,29 +540,21 @@ impl Performance {
         let mut noise_state: u64 = 0x517c_c1b7_2722_0a95;
         let mut lp_noise = 0.0_f64;
 
+        let inv_rate = 1.0 / rate;
+        let inv_rate_hop = inv_rate / self.hop_s;
+        let inv_attack = inv_rate / attack_s;
+        let inv_release = inv_rate / release_s;
+        let nyquist_margin = rate * 0.48;
+        let inharm_b = crate::acoustics_physics::inharmonicity_b_for_source(kind);
+
         for note in &self.notes {
-            if !(0. ..=self.samples as f64 / rate).contains(&note.start)
-                || !note.end.is_finite()
-                || note.end <= note.start
-                || note.end > self.samples as f64 / rate + self.hop_s
-                || note.hz.is_empty()
-                || note.hz.len() > 90_000
-                || note.level_steps.len() != note.hz.len()
-                || note.hz.iter().any(|v| !(20. ..=rate * 0.49).contains(v))
-                || note.level_steps.iter().any(|v| !(0. ..=4.).contains(v))
-                || note
-                    .shape
-                    .mode_weights
-                    .iter()
-                    .any(|(k, v)| !(1..20).contains(k) || !(0. ..=4.).contains(v))
-                || note
-                    .shape
-                    .decay_per_second
-                    .iter()
-                    .any(|(k, v)| !(1..20).contains(k) || !(0. ..=80.).contains(v))
-            {
-                return Err("Invalid dry performance event".into());
-            }
+            validate_dry_note(
+                note,
+                self.samples,
+                rate,
+                self.hop_s,
+                "Invalid dry performance event",
+            )?;
             let start = (note.start * rate).round_ties_even() as usize;
             let end = ((note.end * rate).round_ties_even() as usize).min(self.samples);
             let count = end - start;
@@ -409,92 +565,96 @@ impl Performance {
             if count < 10 {
                 continue;
             }
-            // Optional mild bend-preserving stabilization (user-controlled; never rewrites into MIDI
-            // and NEVER clamps or transposes pitch to published ranges).
-            let effective_hz = if voicing.straighten_mode != StraightenMode::Off {
-                stabilize_note_pitch_mild(
+            // Optional mild bend-preserving stabilization (never quantizes or transposes pitch).
+            let effective_hz: Cow<'_, [f64]> = if voicing.straighten_mode != StraightenMode::Off {
+                Cow::Owned(stabilize_note_pitch_mild(
                     &note.hz,
                     voicing.straighten_mode,
                     voicing.straighten_preserve_bends,
-                )
+                ))
             } else {
-                note.hz.clone()
+                Cow::Borrowed(&note.hz)
             };
-            let pitches: Vec<_> = (0..count)
-                .map(|i| interp(&effective_hz, (i as f64 / rate) / self.hop_s))
-                .collect();
-            let mut sorted = pitches.clone();
-            sorted.sort_by(f64::total_cmp);
-            let n = pitches.len();
-            let median = (sorted[n / 2] + sorted[(n - 1) / 2]) * 0.5;
+            let median = median_of_slice(&effective_hz);
             let levels = smooth(&note.level_steps);
             let modes = build_source_note_modes(note, median, kind);
-            let mut modes_state: Vec<_> = modes
-                .iter()
-                .map(|&(h, w, d)| crate::string_state::Mode::new(h, w, d, rate))
-                .collect();
-            let mut kicks = Vec::new();
-            if let Some(strikes) = &note.re_picks {
-                if strikes.len() > 1024 {
-                    return Err("Too many re-picks in one event".into());
-                }
-                kicks = vec![0.; count];
-                kicks[0] = 1.;
-                for strike in strikes {
-                    if !(0. ..=(count - 1) as f64 / rate).contains(&strike.offset_s)
-                        || !(0. ..=1.5).contains(&strike.strength)
-                    {
-                        return Err("Invalid re-pick".into());
-                    }
-                    kicks[(strike.offset_s * rate).round() as usize] += strike.strength;
-                }
-            }
+            let use_repick_modes = note.re_picks.is_some();
+            let (initial_strength, mid_repicks) = if use_repick_modes {
+                collect_note_repicks(note, count, rate, 0, true)?
+            } else {
+                (1.0, Vec::new())
+            };
+            let precomputed_modes: Vec<(f64, f64, f64, f64)> = if !use_repick_modes {
+                modes
+                    .iter()
+                    .map(|&(h, w, d)| {
+                        (
+                            h,
+                            w,
+                            d,
+                            crate::acoustics_physics::stiff_string_ratio(h, inharm_b),
+                        )
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let mut modes_state: Vec<_> = if use_repick_modes {
+                modes
+                    .iter()
+                    .map(|&(h, w, d)| {
+                        crate::string_state::Mode::new_with_inharmonicity(h, w, d, inharm_b, rate)
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let mut rp_cursor = 0usize;
             let onset_lvl = levels.first().copied().unwrap_or(0.1).max(1e-4);
             let mut cycles = 0.0_f64;
             for (i, sample) in y[start..end].iter_mut().enumerate() {
-                let t = i as f64 / rate;
-                let f = pitches[i];
+                let t = i as f64 * inv_rate;
+                let step_pos = i as f64 * inv_rate_hop;
+                let f = interp(&effective_hz, step_pos);
                 cycles += f;
-                let phase = TAU * cycles / rate;
-                let lvl = interp(&levels, t / self.hop_s);
-                let envelope =
-                    (t / attack_s).min(1.0) * (((count - 1 - i) as f64 / rate) / release_s).min(1.0);
+                let phase = TAU * cycles * inv_rate;
+                let lvl = interp(&levels, step_pos);
+                let envelope = (i as f64 * inv_attack).min(1.0)
+                    * ((count - 1 - i) as f64 * inv_release).min(1.0);
                 let bright_mod = 1.0 + dyn_bright * (lvl - 0.15).clamp(-0.2, 0.8);
-                // Cue precedence over textbook physics: if the extracted cue envelope is actively
-                // sustaining or swelling relative to onset, soften textbook decay so the source
-                // model never chokes out an atypical performance contour.
                 let cue_growth = (lvl / onset_lvl).clamp(0.0, 4.0);
                 let sustain_relief = ((cue_growth - 0.90) / 0.80).clamp(0.0, 1.0);
-                // DDSP-style harmonic oscillator bank driven by extracted f0(t), loudness(t), and source modes
-                let modal_sum = if kicks.is_empty() {
-                    modes
-                        .iter()
-                        .filter(|(h, _, _)| h * f < rate * 0.48)
-                        .map(|(h, w, d)| {
-                            let tilt = if *h > 2.5 {
-                                bright_mod * variant_tilt * smooth_hf_scale
+                let modal_sum = if !use_repick_modes {
+                    let hf_tilt = bright_mod * variant_tilt * smooth_hf_scale;
+                    let mut sum = 0.0_f64;
+                    for &(h, w, d, ratio) in &precomputed_modes {
+                        if ratio * f >= nyquist_margin {
+                            continue;
+                        }
+                        let tilt = if h > 2.5 { hf_tilt } else { 1.0 };
+                        let eff_d = if sustain_relief > 0.0 {
+                            if h <= 1.5 {
+                                d * (1.0 - 0.92 * sustain_relief)
                             } else {
-                                1.0
-                            };
-                            let eff_d = if sustain_relief > 0.0 {
-                                if *h <= 1.5 {
-                                    d * (1.0 - 0.92 * sustain_relief)
-                                } else {
-                                    d * (1.0 - 0.65 * sustain_relief)
-                                }
-                            } else {
-                                *d
-                            };
-                            w * tilt * (h * phase).sin() * (-eff_d * t).exp()
-                        })
-                        .sum::<f64>()
+                                d * (1.0 - 0.65 * sustain_relief)
+                            }
+                        } else {
+                            d
+                        };
+                        sum += w * tilt * (ratio * phase).sin() * (-eff_d * t).exp();
+                    }
+                    sum
                 } else {
+                    let mut kick = if i == 0 { initial_strength } else { 0.0 };
+                    while rp_cursor < mid_repicks.len() && mid_repicks[rp_cursor].0 == i {
+                        kick += mid_repicks[rp_cursor].1;
+                        rp_cursor += 1;
+                    }
                     modes_state
                         .iter_mut()
-                        .map(|m| m.advance(f, rate, kicks[i]))
+                        .map(|m| m.advance(f, rate, kick))
                         .sum::<f64>()
                 };
-                // DDSP-style filtered stochastic noise residual coupled to frame_evidence tonal fraction
                 let ref_texture_scale = if !self.frame_evidence.is_empty() {
                     let global_t = note.start + t;
                     let ev_idx = ((global_t / self.hop_s).round() as usize)
@@ -509,14 +669,22 @@ impl Performance {
                 } else {
                     1.0
                 };
-                let air = if breath_amt > 0.0 {
+                let air = if breath_amt > 0.0 || t <= 0.012 {
                     noise_state = noise_state
                         .wrapping_mul(6364136223846793005)
                         .wrapping_add(1442695040888963407);
                     let white = (((noise_state >> 33) as f64) / (u32::MAX as f64)) * 2.0 - 1.0;
                     lp_noise = lp_noise * 0.65 + white * 0.35;
                     let onset_boost = 1.0 + 1.5 * (-t / 0.045).exp();
-                    breath_amt * ref_texture_scale * onset_boost * (white - lp_noise * 0.5)
+                    let breath = if breath_amt > 0.0 {
+                        breath_amt * ref_texture_scale * onset_boost * (white - lp_noise * 0.5)
+                    } else {
+                        0.0
+                    };
+                    let transient = crate::acoustics_physics::synthesize_onset_transient(
+                        kind, t, white, onset_lvl,
+                    );
+                    breath + transient
                 } else {
                     0.0
                 };
@@ -534,7 +702,10 @@ impl Performance {
 
         // Level-match RMS against baseline dry synthesis (with strict peak ceiling < 0.94)
         let baseline = self.synthesize_dry()?;
-        let base_rms = (baseline.iter().map(|&v| f64::from(v) * f64::from(v)).sum::<f64>()
+        let base_rms = (baseline
+            .iter()
+            .map(|&v| f64::from(v) * f64::from(v))
+            .sum::<f64>()
             / baseline.len().max(1) as f64)
             .sqrt();
         let cur_rms = (y.iter().map(|&v| v * v).sum::<f64>() / y.len().max(1) as f64).sqrt();
@@ -558,7 +729,6 @@ impl Performance {
         let y = self.synthesize_dry_for_source(source)?;
         write_dry_samples(self.rate, &y, path)
     }
-
 
     /// Pre-capture expressive performance transform: alters selected cues
     /// (dynamic phrasing contrast, subtle delayed sustain vibrato, and pick/re-pick
@@ -678,10 +848,16 @@ fn cents_diff(a: f64, b: f64) -> f64 {
     1200. * (a / b).log2()
 }
 
-fn local_floor_at(spec: &[f64], k: usize, max_bin: usize, pad_bins: usize) -> f64 {
+fn local_floor_at_scratch(
+    spec: &[f64],
+    k: usize,
+    max_bin: usize,
+    pad_bins: usize,
+    buf: &mut Vec<f64>,
+) -> f64 {
     let guard = (2 * pad_bins).max(4);
     let span = (5 * pad_bins).max(16);
-    let mut buf = Vec::with_capacity(2 * span);
+    buf.clear();
     let left_lo = k.saturating_sub(span).max(1);
     let left_hi = k.saturating_sub(guard);
     if left_lo < left_hi {
@@ -695,8 +871,9 @@ fn local_floor_at(spec: &[f64], k: usize, max_bin: usize, pad_bins: usize) -> f6
     if buf.is_empty() {
         return 1e-12;
     }
-    buf.sort_by(f64::total_cmp);
-    buf[buf.len() / 2].max(1e-12)
+    let mid = buf.len() / 2;
+    let (_, &mut median, _) = buf.select_nth_unstable_by(mid, f64::total_cmp);
+    median.max(1e-12)
 }
 
 fn calibrate_level_steps(note: &Note, target_rms: &[f64], rate: u32, hop_s: f64) -> Vec<f64> {
@@ -705,46 +882,30 @@ fn calibrate_level_steps(note: &Note, target_rms: &[f64], rate: u32, hop_s: f64)
         return Vec::new();
     }
     let fs = f64::from(rate);
+    let inv_fs_hop = 1.0 / (fs * hop_s);
     let count = ((note.end - note.start) * fs).round_ties_even().max(1.) as usize;
-    let mut sorted = note.hz.clone();
-    sorted.sort_by(f64::total_cmp);
-    let median = (sorted[n_frames / 2] + sorted[(n_frames - 1) / 2]) * 0.5;
-    let modes = build_note_modes(note, median);
-    let mut modes_state: Vec<_> = modes
-        .iter()
-        .map(|&(h, w, d)| crate::string_state::Mode::new(h, w, d, fs))
-        .collect();
-    let mut kicks = Vec::new();
-    if let Some(strikes) = &note.re_picks {
-        kicks = vec![0.0_f64; count];
-        kicks[0] = 1.0;
-        for s in strikes {
-            let idx = ((s.offset_s * fs).round() as usize).min(count - 1);
-            kicks[idx] += s.strength;
+    let median = median_of_slice(&note.hz);
+    let params = build_string_mode_params(note, median, fs);
+    let (initial_strength, mid_repicks) =
+        collect_note_repicks(note, count, fs, 0, false).expect("non-strict repick collect");
+
+    let mut state = crate::string_state::StringState::new();
+    state.repick(initial_strength, &params.weights);
+    let mut rp_cursor = 0usize;
+    let mut prefix_sq = Vec::with_capacity(count + 1);
+    prefix_sq.push(0.0_f64);
+    let mut acc_sq = 0.0_f64;
+    for i in 0..count {
+        let f = interp(&note.hz, i as f64 * inv_fs_hop);
+        let modal_sum = state.tick_cached(f, fs, &params.sample_losses, &params.pickups);
+        // Calibrate against the un-enveloped modal carrier so boundary ramps are not inverted.
+        let out = 1.53 * modal_sum;
+        acc_sq += out * out;
+        prefix_sq.push(acc_sq);
+        while rp_cursor < mid_repicks.len() && mid_repicks[rp_cursor].0 == i {
+            state.repick(mid_repicks[rp_cursor].1, &params.weights);
+            rp_cursor += 1;
         }
-    }
-    let mut unit = vec![0.0_f64; count];
-    let mut cycles = 0.0_f64;
-    for (i, out) in unit.iter_mut().enumerate() {
-        let t = i as f64 / fs;
-        let f = interp(&note.hz, t / hop_s);
-        cycles += f;
-        let phase = TAU * cycles / fs;
-        let modal_sum: f64 = if kicks.is_empty() {
-            modes
-                .iter()
-                .filter(|(h, _, _)| h * f < fs / 2.)
-                .map(|(h, w, d)| w * (h * phase).sin() * (-d * t).exp())
-                .sum()
-        } else {
-            modes_state
-                .iter_mut()
-                .map(|m| m.advance(f, fs, kicks[i]))
-                .sum()
-        };
-        // Calibrate against the un-enveloped modal carrier so the 8 ms attack / 18 ms
-        // release envelope in synthesize_dry() is never inverted into boundary spikes.
-        *out = 1.53 * modal_sum;
     }
     let hop_samples = (hop_s * fs).round().max(1.) as usize;
     let half_w = ((0.010 * fs).round() as usize).max(hop_samples);
@@ -760,7 +921,8 @@ fn calibrate_level_steps(note: &Note, target_rms: &[f64], rate: u32, hop_s: f64)
                 lo = count - 2 * half_w;
             }
         }
-        unit_rms[k] = dsp::rms(&unit[lo..hi]);
+        let len = (hi - lo).max(1) as f64;
+        unit_rms[k] = ((prefix_sq[hi] - prefix_sq[lo]).max(0.0) / len).sqrt();
     }
     let mut steps = vec![0.0_f64; n_frames];
     let mut fallback = 0.0_f64;
@@ -775,8 +937,7 @@ fn calibrate_level_steps(note: &Note, target_rms: &[f64], rate: u32, hop_s: f64)
             fallback = steps[k];
         }
     }
-    // Two multiplicative deconvolution passes compensate for synthesize_dry()'s
-    // smooth() kernel without amplifying noise or inverting boundary ramps.
+    // Two multiplicative deconvolution passes compensate for synthesize_dry()'s smooth() kernel.
     for _ in 0..2 {
         let sm = smooth(&steps);
         for k in 0..n_frames {
@@ -843,10 +1004,13 @@ pub fn analyze_guitar(input: &[f32], rate: u32) -> Result<Performance> {
     let df = FS / NFFT as f64;
     let max_bin = ((max_eval_hz / df).floor() as usize).min(NFFT / 2 - 1);
     let hann_win = dsp::hann(WIN);
-    let win_sum: f64 = hann_win.iter().sum();
+    let spec_scale = 2.0 / hann_win.iter().sum::<f64>();
     let fft = FftPlanner::<f64>::new().plan_fft_forward(NFFT);
     let mut fft_buf = vec![Complex::new(0., 0.); NFFT];
     let mut fft_scratch = vec![Complex::new(0., 0.); fft.get_inplace_scratch_len()];
+    let mut raw_peaks: Vec<(f64, f64, f64, usize)> = Vec::new();
+    let mut covered = vec![false; max_bin + 2];
+    let mut floor_scratch: Vec<f64> = Vec::with_capacity(128);
 
     let mut levels = Vec::with_capacity(frame_count);
     let mut raw_levels = Vec::with_capacity(frame_count);
@@ -881,18 +1045,15 @@ pub fn analyze_guitar(input: &[f32], rate: u32) -> Result<Performance> {
             *x = get(j as isize - WIN as isize / 2);
         }
         let mean = frame.iter().sum::<f64>() / WIN as f64;
-        for x in &mut frame {
-            *x -= mean;
-        }
-        // Compute zero-padded STFT magnitude spectrum for harmonic-comb & overlap evidence.
-        fft_buf.fill(Complex::new(0., 0.));
         for j in 0..WIN {
-            fft_buf[j].re = frame[j] * hann_win[j];
+            frame[j] -= mean;
+            fft_buf[j] = Complex::new(frame[j] * hann_win[j], 0.0);
         }
+        fft_buf[WIN..].fill(Complex::new(0., 0.));
         fft.process_with_scratch(&mut fft_buf, &mut fft_scratch);
         let spec: Vec<f64> = fft_buf[..=max_bin + 1]
             .iter()
-            .map(|v| v.norm() * 2. / win_sum)
+            .map(|v| v.norm() * spec_scale)
             .collect();
         let total_power: f64 = spec[1..=max_bin].iter().map(|v| v * v).sum();
         let max_spec = spec[1..=max_bin].iter().copied().fold(0., f64::max);
@@ -904,11 +1065,13 @@ pub fn analyze_guitar(input: &[f32], rate: u32) -> Result<Performance> {
         let mut strongest_peak_amp = 0.0_f64;
         let pad_bins = NFFT / WIN;
         if max_spec > 1e-8 && total_power > 1e-16 {
-            let mut raw_peaks = Vec::new();
+            raw_peaks.clear();
+            let min_peak = max_spec * 0.014;
             for k in 2..max_bin {
                 let v = spec[k];
-                if v > spec[k - 1] && v >= spec[k + 1] && v >= max_spec * 0.014 {
-                    let floor = local_floor_at(&spec, k, max_bin, pad_bins);
+                if v > spec[k - 1] && v >= spec[k + 1] && v >= min_peak {
+                    let floor =
+                        local_floor_at_scratch(&spec, k, max_bin, pad_bins, &mut floor_scratch);
                     let prom = v / floor;
                     if prom >= 2.2 {
                         let hz = dsp::refined_bin(&spec, k) * df;
@@ -921,7 +1084,7 @@ pub fn analyze_guitar(input: &[f32], rate: u32) -> Result<Performance> {
             raw_peaks.sort_by(|a, b| b.1.total_cmp(&a.1));
             raw_peaks.truncate(24);
             let lobe_half = (pad_bins + 3).min(12);
-            let mut covered = vec![false; max_bin + 2];
+            covered.fill(false);
             for &(hz, amp, prom, k) in &raw_peaks {
                 if amp > strongest_peak_amp {
                     strongest_peak_amp = amp;
@@ -1441,6 +1604,7 @@ pub fn analyze_guitar(input: &[f32], rate: u32) -> Result<Performance> {
             l_sorted.sort_by(f64::total_cmp);
             let accent = l_sorted[((l_sorted.len() - 1) * 73) / 100];
             let mut note = Note {
+                string_id: None,
                 re_picks: (!repicks.is_empty()).then_some(repicks),
                 start: a as f64 * HOP_S,
                 end: b as f64 * HOP_S,
@@ -1658,6 +1822,9 @@ fn independent_f0_frame(
     let mut second_s = 0.0;
     let steps = 204usize; // 75 * 2^(204/48) ≈ 1428 Hz
     let mut grid_scores = vec![(0.0_f64, 0.0_f64); steps];
+    let pad_bins = (nfft / win).max(2);
+    let min_pk = max_amp * 0.03;
+    let mut floor_scratch: Vec<f64> = Vec::with_capacity(128);
     for (idx, slot) in grid_scores.iter_mut().enumerate() {
         let f0 = 75.0 * 2_f64.powf(idx as f64 / 48.0);
         if f0 > 1400.0 {
@@ -1673,18 +1840,20 @@ fn independent_f0_frame(
             let lo = k.saturating_sub(1).max(1);
             let hi = (k + 1).min(max_bin);
             let pk = spec[lo..=hi].iter().copied().fold(0., f64::max);
-            let fl = local_floor_at(&spec, k, max_bin, (nfft / win).max(2));
-            if pk > fl * 2.4 && pk > max_amp * 0.03 {
-                let contrib = (pk / max_amp).sqrt() / (h as f64).powf(0.35);
-                if h == 1 {
-                    h1_ok = true;
+            if pk > min_pk {
+                let fl = local_floor_at_scratch(&spec, k, max_bin, pad_bins, &mut floor_scratch);
+                if pk > fl * 2.4 {
+                    let contrib = (pk / max_amp).sqrt() / (h as f64).powf(0.35);
+                    if h == 1 {
+                        h1_ok = true;
+                    }
+                    if h % 2 == 1 {
+                        odd_s += contrib;
+                    } else {
+                        even_s += contrib;
+                    }
+                    hits += 1;
                 }
-                if h % 2 == 1 {
-                    odd_s += contrib;
-                } else {
-                    even_s += contrib;
-                }
-                hits += 1;
             }
         }
         if hits == 0 || (hits < 2 && !h1_ok) {
@@ -2371,6 +2540,7 @@ pub fn analyze_guitar_legacy(input: &[f32], rate: u32) -> Result<Performance> {
                 }
             }
             notes.push(Note {
+                string_id: None,
                 re_picks: None,
                 start: a as f64 / 200.,
                 end: b as f64 / 200.,
@@ -2452,7 +2622,14 @@ fn build_source_note_modes(
                     (w, 0.55 + 0.42 * h.powf(0.92))
                 }
                 SourceRegenKind::BowedLow => {
-                    let w = (1.0 / h.powf(0.96)) * if k == 1 { 1.35 } else if k <= 4 { 1.12 } else { 0.85 };
+                    let w = (1.0 / h.powf(0.96))
+                        * if k == 1 {
+                            1.35
+                        } else if k <= 4 {
+                            1.12
+                        } else {
+                            0.85
+                        };
                     (w, 0.24 + 0.14 * h.powf(0.55))
                 }
                 SourceRegenKind::BowedHigh => {
@@ -2487,7 +2664,13 @@ fn build_source_note_modes(
                     (w, 0.20 + 0.12 * h.powf(0.55))
                 }
                 SourceRegenKind::VoiceFemale => {
-                    let w = (if k == 1 { 1.15 } else if k <= 5 { 1.05 } else { 0.88 }) / h.powf(1.05);
+                    let w = (if k == 1 {
+                        1.15
+                    } else if k <= 5 {
+                        1.05
+                    } else {
+                        0.88
+                    }) / h.powf(1.05);
                     (w, 0.20 + 0.12 * h.powf(0.52))
                 }
                 SourceRegenKind::VoiceEnsemble => {
@@ -2588,6 +2771,11 @@ fn apply_source_body_contour(
     kind: crate::studio_catalog::SourceRegenKind,
 ) {
     use crate::studio_catalog::SourceRegenKind;
+    if let Some(mut modal_body) =
+        crate::acoustics_physics::ModalBodyResonator::for_source(rate, kind)
+    {
+        modal_body.process_inplace(buf);
+    }
     match kind {
         SourceRegenKind::Neutral | SourceRegenKind::PluckedElectric => {}
         SourceRegenKind::PluckedAcoustic => {
@@ -2981,7 +3169,9 @@ mod source_regen_tests {
     /// Estimate fundamental frequency in a mono audio slice via normalized autocorrelation.
     fn estimate_f0_autocorr(slice: &[f32], rate: u32, min_hz: f64, max_hz: f64) -> f64 {
         let min_lag = (f64::from(rate) / max_hz).floor().max(2.0) as usize;
-        let max_lag = (f64::from(rate) / min_hz).ceil().min((slice.len() / 2) as f64) as usize;
+        let max_lag = (f64::from(rate) / min_hz)
+            .ceil()
+            .min((slice.len() / 2) as f64) as usize;
         let mut best_lag = min_lag;
         let mut best_corr = f64::NEG_INFINITY;
         for lag in min_lag..=max_lag {
@@ -3030,6 +3220,7 @@ mod source_regen_tests {
         let rate = 48_000_u32;
         let hop_s = 0.005_f64;
         let make_note = |start: f64, dur: f64, hz: f64| Note {
+            string_id: None,
             re_picks: None,
             start,
             end: start + dur,
@@ -3050,7 +3241,9 @@ mod source_regen_tests {
             frame_evidence: vec![],
         };
 
-        let y_cello = perf.synthesize_dry_for_source(cello).expect("cello dry render");
+        let y_cello = perf
+            .synthesize_dry_for_source(cello)
+            .expect("cello dry render");
         let y_soprano = perf
             .synthesize_dry_for_source(soprano)
             .expect("soprano dry render");
@@ -3133,6 +3326,7 @@ mod source_regen_tests {
             samples: rate as usize,
             hop_s: 0.005,
             notes: vec![Note {
+                string_id: None,
                 re_picks: None,
                 start: 0.08,
                 end: 0.72,
@@ -3158,28 +3352,48 @@ mod source_regen_tests {
         // 1. Changing Source updates prompt output
         let mut src_rig = base_rig.clone();
         src_rig.source_index = soprano_idx;
-        assert_ne!(out_base, render_prompt(&src_rig), "Source change must update signal");
+        assert_ne!(
+            out_base,
+            render_prompt(&src_rig),
+            "Source change must update signal"
+        );
 
         // 2. Changing Mic updates prompt output
         let mut mic_rig = base_rig.clone();
         mic_rig.mics[0].catalog_index = mkh_idx;
-        assert_ne!(out_base, render_prompt(&mic_rig), "Mic change must update signal");
+        assert_ne!(
+            out_base,
+            render_prompt(&mic_rig),
+            "Mic change must update signal"
+        );
 
         // 3. Changing Materials updates prompt output
         let mut mat_rig = base_rig.clone();
         mat_rig.surface_faces[0] = 28; // Sheet steel
-        assert_ne!(out_base, render_prompt(&mat_rig), "Material change must update signal");
+        assert_ne!(
+            out_base,
+            render_prompt(&mat_rig),
+            "Material change must update signal"
+        );
 
         // 4. Changing Room dimensions updates prompt output
         let mut room_rig = base_rig.clone();
         room_rig.dimensions_m = [8.0, 7.0, 4.0];
-        assert_ne!(out_base, render_prompt(&room_rig), "Room change must update signal");
+        assert_ne!(
+            out_base,
+            render_prompt(&room_rig),
+            "Room change must update signal"
+        );
 
         // 5. Display-only unit & overlay changes leave prompt output bit-identical
         let mut unit_rig = base_rig.clone();
         unit_rig.unit = studio_catalog::Unit::Centimetres;
         unit_rig.show_patterns = !base_rig.show_patterns;
-        assert_eq!(out_base, render_prompt(&unit_rig), "Display-only changes must keep audio bit-identical");
+        assert_eq!(
+            out_base,
+            render_prompt(&unit_rig),
+            "Display-only changes must keep audio bit-identical"
+        );
     }
 
     #[test]
@@ -3199,12 +3413,27 @@ mod source_regen_tests {
             .expect("Female Soprano Voice present");
         let percussion = sources
             .iter()
-            .find(|s| s.regen_model.family_kind == crate::studio_catalog::SourceRegenKind::Percussion)
+            .find(|s| {
+                s.regen_model.family_kind == crate::studio_catalog::SourceRegenKind::Percussion
+            })
             .expect("Percussion source present");
 
         // Confirm physics constraint metadata is consistent & non-empty across families
-        assert_eq!(bass.regen_model.family_kind.physics_constraint().harmonic_ceiling_hz, Some(3800.0));
-        assert!(soprano.regen_model.family_kind.physics_constraint().breath_texture_amount > 0.0);
+        assert_eq!(
+            bass.regen_model
+                .family_kind
+                .physics_constraint()
+                .harmonic_ceiling_hz,
+            Some(3800.0)
+        );
+        assert!(
+            soprano
+                .regen_model
+                .family_kind
+                .physics_constraint()
+                .breath_texture_amount
+                > 0.0
+        );
 
         let rate = 48_000_u32;
         let hop_s = 0.005_f64;
@@ -3241,10 +3470,22 @@ mod source_regen_tests {
                 };
                 FrameEvidence {
                     time_s: t,
-                    level_rms: if status == EvidenceStatus::Supported { 0.25 } else { 0.01 },
+                    level_rms: if status == EvidenceStatus::Supported {
+                        0.25
+                    } else {
+                        0.01
+                    },
                     status,
-                    selected_hz: if status == EvidenceStatus::Supported { Some(220.0) } else { None },
-                    tonal_fraction: if status == EvidenceStatus::Supported { 0.88 } else { 0.15 },
+                    selected_hz: if status == EvidenceStatus::Supported {
+                        Some(220.0)
+                    } else {
+                        None
+                    },
+                    tonal_fraction: if status == EvidenceStatus::Supported {
+                        0.88
+                    } else {
+                        0.15
+                    },
                     hypotheses: vec![],
                 }
             })
@@ -3255,6 +3496,7 @@ mod source_regen_tests {
             samples: total_samples,
             hop_s,
             notes: vec![Note {
+                string_id: None,
                 re_picks: None,
                 start: 0.05,
                 end: 1.05,
@@ -3268,8 +3510,12 @@ mod source_regen_tests {
 
         let y_piano = perf.synthesize_dry_for_source(piano).expect("piano render");
         let y_bass = perf.synthesize_dry_for_source(bass).expect("bass render");
-        let y_soprano = perf.synthesize_dry_for_source(soprano).expect("soprano render");
-        let y_perc = perf.synthesize_dry_for_source(percussion).expect("percussion render");
+        let y_soprano = perf
+            .synthesize_dry_for_source(soprano)
+            .expect("soprano render");
+        let y_perc = perf
+            .synthesize_dry_for_source(percussion)
+            .expect("percussion render");
 
         // 1. Implausible-band constraint: Bass (3.8 kHz lowpass) suppresses high-band energy vs Soprano
         let s_bass = measure_spectral_summary(&y_bass, rate);
@@ -3354,6 +3600,7 @@ mod source_regen_tests {
             hop_s,
             notes: vec![
                 Note {
+                    string_id: None,
                     re_picks: None,
                     start: 0.05,
                     end: 0.65,
@@ -3363,6 +3610,7 @@ mod source_regen_tests {
                     shape: Shape::default(),
                 },
                 Note {
+                    string_id: None,
                     re_picks: None,
                     start: 0.95,
                     end: 1.55,
@@ -3409,9 +3657,18 @@ mod source_regen_tests {
 
         // 2. Mild stabilization reduces steady-note wobble while preserving intentional +3 st bend!
         let stab_wobble = stabilize_note_pitch_mild(&wobbly_hz, StraightenMode::Moderate, true);
-        let raw_std = (wobbly_hz.iter().map(|&f| (f - 440.0).powi(2)).sum::<f64>() / frames as f64).sqrt();
-        let stab_std = (stab_wobble.iter().map(|&f| (f - 440.0).powi(2)).sum::<f64>() / frames as f64).sqrt();
-        assert!(stab_std < raw_std * 0.5, "stabilization must reduce steady-note wobble ({stab_std:.2} vs {raw_std:.2})");
+        let raw_std =
+            (wobbly_hz.iter().map(|&f| (f - 440.0).powi(2)).sum::<f64>() / frames as f64).sqrt();
+        let stab_std = (stab_wobble
+            .iter()
+            .map(|&f| (f - 440.0).powi(2))
+            .sum::<f64>()
+            / frames as f64)
+            .sqrt();
+        assert!(
+            stab_std < raw_std * 0.5,
+            "stabilization must reduce steady-note wobble ({stab_std:.2} vs {raw_std:.2})"
+        );
 
         let stab_bend = stabilize_note_pitch_mild(&bend_hz, StraightenMode::Moderate, true);
         let bend_span_st = 12.0 * (stab_bend[frames - 1] / stab_bend[0]).log2();
@@ -3420,5 +3677,160 @@ mod source_regen_tests {
             "intentional bend must be preserved under bend-preserving straightening (got {bend_span_st:.2} st)"
         );
     }
-}
 
+    #[test]
+    fn controlled_single_string_pure_bend_vs_additive_repick_and_polyphony() {
+        let rate = 48_000_u32;
+        let hop_s = 0.005_f64;
+        let frames = 161; // 0.80 s
+        let bend_hz: Vec<f64> = (0..frames)
+            .map(|i| 220.0 * 2.0_f64.powf(2.0 * (i as f64 / (frames - 1) as f64) / 12.0))
+            .collect();
+
+        let pure_bend = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![Note {
+                string_id: Some(0),
+                re_picks: None,
+                start: 0.10,
+                end: 0.90,
+                hz: bend_hz.clone(),
+                level_steps: vec![0.18; frames],
+                _accent: None,
+                shape: Shape::default(),
+            }],
+            frame_evidence: vec![],
+        };
+        let repicked_bend = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![Note {
+                string_id: Some(0),
+                re_picks: Some(vec![Strike {
+                    offset_s: 0.30,
+                    strength: 0.55,
+                }]),
+                start: 0.10,
+                end: 0.90,
+                hz: bend_hz,
+                level_steps: vec![0.18; frames],
+                _accent: None,
+                shape: Shape::default(),
+            }],
+            frame_evidence: vec![],
+        };
+
+        let y_bend = pure_bend.synthesize_dry().unwrap();
+        let y_repick = repicked_bend.synthesize_dry().unwrap();
+        let strike_sample = ((0.10 + 0.30) * f64::from(rate)).round() as usize; // 19200
+        assert_eq!(y_bend[..=strike_sample], y_repick[..=strike_sample]);
+        assert!(y_bend[..4800].iter().all(|&v| v == 0.0));
+        assert!(y_bend[43200..].iter().all(|&v| v == 0.0));
+        let e_bend: f64 = y_bend[strike_sample + 1..strike_sample + 4800]
+            .iter()
+            .map(|&v| f64::from(v) * f64::from(v))
+            .sum();
+        let e_repick: f64 = y_repick[strike_sample + 1..strike_sample + 4800]
+            .iter()
+            .map(|&v| f64::from(v) * f64::from(v))
+            .sum();
+        assert!(e_repick > e_bend * 1.15);
+
+        // Basic polyphony: different string_ids render independently and sum linearly.
+        let note_s0 = Note {
+            string_id: Some(0),
+            re_picks: None,
+            start: 0.10,
+            end: 0.60,
+            hz: vec![220.0; 101],
+            level_steps: vec![0.14; 101],
+            _accent: None,
+            shape: Shape::default(),
+        };
+        let note_s1 = Note {
+            string_id: Some(1),
+            re_picks: None,
+            start: 0.25,
+            end: 0.75,
+            hz: vec![329.63; 101],
+            level_steps: vec![0.14; 101],
+            _accent: None,
+            shape: Shape::default(),
+        };
+        let p0 = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![note_s0.clone()],
+            frame_evidence: vec![],
+        }
+        .synthesize_dry()
+        .unwrap();
+        let p1 = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![note_s1.clone()],
+            frame_evidence: vec![],
+        }
+        .synthesize_dry()
+        .unwrap();
+        let poly = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![note_s0.clone(), note_s1],
+            frame_evidence: vec![],
+        }
+        .synthesize_dry()
+        .unwrap();
+        for i in 0..poly.len() {
+            assert!((poly[i] - (p0[i] + p1[i])).abs() < 1e-6);
+        }
+
+        // Shared string_id carries persistent vibration state across sequential notes without reset.
+        let shared_second = Note {
+            string_id: Some(0),
+            re_picks: None,
+            start: 0.60,
+            end: 0.90,
+            hz: vec![246.94; 61],
+            level_steps: vec![0.14; 61],
+            _accent: None,
+            shape: Shape::default(),
+        };
+        let shared_out = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![note_s0, shared_second.clone()],
+            frame_evidence: vec![],
+        }
+        .synthesize_dry()
+        .unwrap();
+        let fresh_second_out = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s,
+            notes: vec![shared_second],
+            frame_evidence: vec![],
+        }
+        .synthesize_dry()
+        .unwrap();
+        assert_ne!(shared_out[28_800..33_600], fresh_second_out[28_800..33_600]);
+
+        // Optional simple body resonance produces finite colored dry output.
+        let body_out =
+            pure_bend
+                .synthesize_dry_with_body_resonance(
+                    &crate::string_state::BodyResonanceConfig::default(),
+                )
+                .unwrap();
+        assert_eq!(body_out.len(), y_bend.len());
+        assert!(body_out.iter().all(|v| v.is_finite()));
+        assert_ne!(body_out, y_bend);
+    }
+}

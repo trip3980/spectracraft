@@ -1,95 +1,214 @@
 # SpectraCraft
 
-A single-source audio tool that regenerates a clean dry performance from a reference track, then lets you surgically refine it and optionally place it in a chosen microphone and room environment.
+A single-source audio workstation that regenerates a clean dry performance from a reference track, lets you surgically refine it, optionally places it in a chosen microphone and room environment, and exports standard audio/marker interchange bundles to external DAWs and audio editors.
 
 Repository: <https://github.com/storytold/spectracraft>
 
-## Authoritative Specification
+## Authoritative Specification & Architecture Docs
 
 - **[`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md)** — Canonical Rust architecture, five-stage pipeline contract, acoustic mathematics, UI boundaries, and verification requirements.
-- **[`SPECTRACRAFT_BIBLE.md`](./SPECTRACRAFT_BIBLE.md)** — Standing engineering rules and working constraints for SpectraCraft.
-- **[`PLATFORM.md`](./PLATFORM.md)** — Cross-platform desktop architecture (Linux, Windows, macOS), platform compatibility layer (`platform.rs`), CI workflow, and future iOS/Android notes.
-- **[`PLUGIN_ARCHITECTURE.md`](./PLUGIN_ARCHITECTURE.md)** — UI-free buffer-in/buffer-out engine entry points (`AudioPipelineEngine`) and DAW preset state contract for future VST3/AU/AAX wrapping.
+- **[`SPECTRACRAFT_BIBLE.md`](./SPECTRACRAFT_BIBLE.md)** — Standing engineering rules, Rust-first engine boundary, and Section 09 Security & Robustness Checklist.
+- **[`GEMINI.md`](./GEMINI.md)** & **[`.agents/skills/security-robustness-check/SKILL.md`](./.agents/skills/security-robustness-check/SKILL.md)** — Repository guide and standing pre-export security & robustness checklist.
+- **[`PLATFORM.md`](./PLATFORM.md)** — Cross-platform shell architecture (native `egui`/`eframe` desktop + Tauri 2 desktop/mobile targets for Linux, macOS, Windows, iOS, and Android).
+- **[`PLUGIN_ARCHITECTURE.md`](./PLUGIN_ARCHITECTURE.md)** — UI-free `AudioPipelineEngine`, `EngineStateSnapshot`, and thin DAW/editor interchange layer (`daw_bridge.rs`) for Adobe Audition, Logic Pro, standard DAWs, and ArtCraft SoundCraft.
 - **[`spectracraft-mono/DESIGN-CONTRACT.md`](./spectracraft-mono/DESIGN-CONTRACT.md)** — Core dry-listening gate and visual/audio separation contract.
+- **[`CRAFT_LIBS_MAINTENANCE.md`](./CRAFT_LIBS_MAINTENANCE.md)** — Pinned `storytold/craft-libs` Git dependency policy and thin adapter isolation (`report_export.rs`, `settings_store.rs`, `update_manager.rs`).
 - **[`spectracraft-mono/THIRD-PARTY.md`](./spectracraft-mono/THIRD-PARTY.md)** — Third-party crate and reference attributions.
 
 ## Five-Stage Audio Pipeline
 
 SpectraCraft processes a single-source track in this fixed, ordered pipeline (see [`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md)):
 
-1. **Stage 1 — Dry Regeneration** *(always available, cached)*: Extracts performance shape cues and resynthesizes a completely dry signal using newly synthesized samples only. Source-character guidance and light straightening apply only in this stage.
-2. **Stage 2 — Surgical Region Editing** *(dry take only)*: Applies localized time-range or rectangular time+frequency marquee fixes to the cached dry take and blends them back with short crossfades. Audio outside the selection remains unchanged.
+1. **Stage 1 — Dry Regeneration** *(always available, cached)*: Extracts performance shape cues and resynthesizes a completely dry signal using persistent-state physics, additive re-pick, and continuous pitch bends with newly synthesized samples only.
+2. **Stage 2 — Surgical Region Editing** *(dry take only)*: Applies localized time-range or rectangular time+frequency marquee fixes to the cached dry take and blends them back with short crossfades. Audio outside the selection remains bit-identical.
 3. **Stage 3 — Optional Microphone** *(off / bypassed by default)*: Applies virtual microphone model, polar pattern, position, and aim to the dry take.
 4. **Stage 4 — Optional Space / Room** *(off / bypassed by default)*: Applies room dimensions, 6-face surface absorption profiles, and air temperature reflections.
 5. **Stage 5 — Optional Plugin Slot** *(off / bypassed by default)*: Applies optional post-capture processing (`GentleEq`, `SoftDynamics`, `NoiseControl`, `PhaseLimiter`) before final output.
 
-## Core Invariants
+## Protected Invariants (Must Stay Intact)
 
-- **Single source**: One imported performance, voice, or stem per work unit.
-- **Performance shape as reference**: Extracted performance evidence stays immutable; loose profiles guide reshaping without replacing evidence.
-- **Fresh signal only**: Regenerated stages never blend original PCM, source phase, or copied residuals into processed outputs.
-- **Dry-first**: All downstream stages operate strictly on the cached Stage 1/2 dry signal.
-- **Independent stage bypass**: Optional stages (Stages 3–5) are off by default, independently bypassable, and preserve settings without substituting original audio.
-- **Display isolation**: Zooming, scrolling, unit changes, polar/3D camera navigation, and view modes never alter audio or render fingerprints.
-- **Uncertainty preserved**: Ambiguous frames remain explicitly marked rather than invented over.
+Any packaging, UI, or DAW-interchange work **must** preserve these core guarantees:
+
+- **Stage 1 physics unchanged**: Persistent-state physics, additive re-pick, and continuous-bend behavior remain strictly intact.
+- **Zero original PCM in Stage 1–5 outputs**: Regenerated stages never blend original PCM, source phase, or copied residuals into processed outputs.
+- **Blind Before/After reporting isolation**: Before and After analyzers inspect only their own single WAV input; comparison summaries are computed strictly from numeric deltas.
+- **Thin `craft-libs` adapters**: All `craft-pdf`, `craft-atomic`, and `craft-settings` calls stay isolated behind thin adapters (`report_export.rs`, `settings_store.rs`, `update_manager.rs`) pinned to explicit commits in `Cargo.lock`.
+- **Independent stage bypass & display isolation**: Optional stages (3–5) default to bypassed (bit-identical to dry), and visual navigation/zooming never alters audio or render fingerprints.
 
 ## Workspace Layout
 
 ```text
 .
-├── Cargo.toml                         # Root Rust workspace manifest
-├── Cargo.lock                         # Pinned lockfile (committed for binary reproducibility)
-├── SPECTRACRAFT_SPEC.md               # Authoritative Rust specification
-├── SPECTRACRAFT_BIBLE.md              # Standing project rules
-├── GEMINI.md                          # Agent & verification workflow guide
-├── spectracraft-mono/                 # Primary Rust crate (CLI, QA engine, native egui desktop)
-│   ├── Cargo.toml
-│   ├── src/
-│   │   ├── lib.rs                     # Core DSP, analysis, resynthesis, pipeline, studio catalogs
-│   │   ├── main.rs                    # `spectracraft-mono` CLI
-│   │   └── bin/
-│   │       ├── desktop.rs             # `spectracraft-desktop` native egui workstation
-│   │       └── spectracraft-qa.rs     # `spectracraft-qa` verification & reporting CLI
-│   ├── tests/                         # Integration & invariant test suites
-│   ├── capture-reference/             # Source, microphone, and 6-band surface reference data
-│   ├── vendor/craft-atomic/           # Vendored atomic file-write helper (storytold/craft-libs)
-│   ├── deny.toml                      # Dependency policy
-│   └── README.md                      # Detailed Rust crate notes, CLI examples & verification details
-└── .gitignore
+├── Cargo.toml                         # Root Rust workspace (excludes standalone src-tauri for offline --locked core builds)
+├── Cargo.lock                         # Pinned lockfile for core CLI, QA, and native egui desktop
+├── package.json                       # React + Vite workstation UI + Tauri 2 build scripts
+├── server.ts                          # Local Express + Vite dev/API bridge (portable os.tmpdir paths)
+├── src/                               # React + TypeScript workstation frontend
+├── src-tauri/                         # Tauri 2 cross-platform shell (Linux, macOS, Windows, iOS, Android; no Electron)
+│   ├── Cargo.toml                     # Standalone crate linking spectracraft-mono (default-features = false)
+│   ├── tauri.conf.json                # Desktop + mobile bundle config
+│   ├── capabilities/default.json      # Tauri 2 ACL permissions
+│   ├── icons/                         # App icons (32x32, 128x128, 512x512)
+│   └── src/                           # Thin IPC bridge (lib.rs with mobile_entry_point + main.rs)
+└── spectracraft-mono/                 # Native Rust DSP core, CLI, QA engine, and native egui desktop binary
+    ├── src/
+    │   ├── lib.rs                     # Core DSP library & module exports
+    │   ├── pipeline.rs                # 5-stage pipeline, AudioPipelineEngine, EngineStateSnapshot
+    │   ├── daw_bridge.rs              # Thin DAW/editor interchange layer (Audition, Logic Pro, DAW, SoundCraft)
+    │   ├── technical_report.rs        # Blind Before/After analyzer & stacked comparison plots
+    │   ├── report_export.rs           # Thin adapter for craft-pdf & craft-atomic
+    │   ├── settings_store.rs          # Thin adapter for craft-settings (config.toml)
+    │   ├── update_manager.rs          # Non-blocking launch update check & 3-choice verification flow
+    │   ├── platform.rs                # OS abstraction layer
+    │   ├── main.rs                    # `spectracraft-mono` CLI
+    │   └── bin/
+    │       ├── desktop.rs             # `spectracraft-desktop` native egui/eframe workstation
+    │       └── spectracraft-qa.rs     # `spectracraft-qa` verification, reporting & DAW export CLI
+    └── tests/                         # Integration, invariant, sweep & solo-instrument verification suites
 ```
 
-## Build, Test, and Run
+---
 
-Requires **Rust 1.89 or later**. Core CLI and QA builds have no Python, FFmpeg, or external runtime dependencies.
+## Required Toolchains
 
-### Core CLI & QA Tests
+| Target | Required Toolchains & System SDKs |
+| --- | --- |
+| **Core Rust CLI / QA** | **Rust 1.89+** (`rustup`, `cargo`, `rustfmt`, `clippy`). Zero Python or FFmpeg runtime dependencies. |
+| **Web / React UI** | **Node.js 20+** and `npm`. |
+| **Native `egui` Desktop** (`spectracraft-desktop`) | Rust 1.89+; on Linux: `pkg-config`, `libasound2-dev`, `libx11-dev`, `libxcb-*`, `libxkbcommon-dev`, `libgl1-mesa-dev`; on Windows: Visual Studio C++ Build Tools; on macOS: Xcode Command Line Tools. |
+| **Tauri 2 Desktop (Linux x64)** | Rust 1.89+, Node.js 20+, Tauri 2 CLI (`cargo install tauri-cli --version "^2"`), plus WebKitGTK & GTK3 dev libs (`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `patchelf`). |
+| **Tauri 2 Desktop (macOS arm64 / x64)** | Rust 1.89+ (`aarch64-apple-darwin` & `x86_64-apple-darwin`), Node.js 20+, Tauri 2 CLI, Xcode Command Line Tools. |
+| **Tauri 2 Desktop (Windows x64)** | Rust 1.89+ (`x86_64-pc-windows-msvc`), Node.js 20+, Tauri 2 CLI, Visual Studio C++ Build Tools, Microsoft Edge WebView2 runtime. |
+| **Tauri 2 Mobile (iOS)** | macOS host, **Xcode 15+**, CocoaPods (`brew install cocoapods`), Rust targets `aarch64-apple-ios` & `aarch64-apple-ios-sim`, Apple Developer Team ID for device signing. |
+| **Tauri 2 Mobile (Android)** | **Android Studio**, Android SDK (API 26+), Android NDK (`NDK_HOME`), Java 17 (`JAVA_HOME`), Rust targets `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, keystore for release signing. |
+
+---
+
+## Build Commands by Platform Target
+
+### 1. Core Rust Binaries (CLI & QA)
 
 ```sh
-cargo test --locked
 cargo build --release --locked
 ```
 
-### Optional Bench Suite
+This produces `target/release/spectracraft-mono` and `target/release/spectracraft-qa`. To launch the optional local React + Express workstation bridge against the compiled Rust binaries from a fresh clone:
 
 ```sh
-cargo test --locked --release --features bench --lib --tests
-cargo build --locked --release --features bench --bins
+npm install
+npm run dev
 ```
 
-### Native Desktop Workstation (`spectracraft-desktop`)
+### 2. Native Desktop Shell (`spectracraft-desktop` via `egui`/`eframe`)
 
-On Linux, building with `--features desktop` requires standard graphics/windowing libraries and ALSA development headers (`libasound2-dev` + `pkg-config`).
+SpectraCraft preserves its native Rust `egui`/`eframe` binary alongside Tauri 2:
 
 ```sh
-cargo test --locked --features desktop --bin spectracraft-desktop
+# Linux x64 / macOS arm64 & x64 / Windows x64
+cargo build --locked --release --features desktop --bin spectracraft-desktop
 cargo run --locked --features desktop --bin spectracraft-desktop
 ```
 
-### Formatting & Linting
+### 3. Tauri 2 Desktop Builds (React + Vite UI + `spectracraft-mono` core)
+
+Install frontend dependencies and the Tauri 2 CLI once:
 
 ```sh
+npm install
+cargo install tauri-cli --version "^2" --locked
+```
+
+Run in development mode:
+
+```sh
+npm run tauri:dev
+```
+
+Build release installers/bundles per host platform:
+
+```sh
+# Linux (x64 — .deb, .rpm, .AppImage)
+cargo tauri build --target x86_64-unknown-linux-gnu
+
+# Windows (x64 — .msi, NSIS .exe)
+cargo tauri build --target x86_64-pc-windows-msvc
+
+# macOS (Apple Silicon arm64 — .app, .dmg)
+rustup target add aarch64-apple-darwin
+cargo tauri build --target aarch64-apple-darwin
+
+# macOS (Intel x64 — .app, .dmg)
+rustup target add x86_64-apple-darwin
+cargo tauri build --target x86_64-apple-darwin
+
+# macOS (Universal arm64 + x64 — .app, .dmg)
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+cargo tauri build --target universal-apple-darwin
+```
+
+### 4. Tauri 2 Mobile Builds (iOS & Android)
+
+Tauri 2 mobile configuration is included in `src-tauri/tauri.conf.json` (`iOS` & `android` bundle settings) and `src-tauri/src/lib.rs` (`#[cfg_attr(mobile, tauri::mobile_entry_point)]`). Signing identities / keystores are intentionally not committed.
+
+```sh
+# iOS (macOS + Xcode required)
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+cargo tauri ios init
+cargo tauri ios dev          # Simulator / connected device
+cargo tauri ios build        # IPA / Xcode archive (configure Apple Team ID in Xcode or tauri.conf.json)
+
+# Android (Android SDK + NDK required)
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+cargo tauri android init
+cargo tauri android dev      # Emulator / connected device
+cargo tauri android build    # APK / AAB (configure release keystore before Play Store distribution)
+```
+
+---
+
+## Audio-Editor & DAW Interchange Layer
+
+SpectraCraft includes a thin, extensible standard-interchange bridge (`spectracraft-mono/src/daw_bridge.rs`) behind `EditorInterchangeAdapter` so external editors receive lossless 24-bit TPDF or 32-bit float WAV stems, sample-accurate markers, and `EngineStateSnapshot` preset JSON (`spectracraft-state.json`):
+
+| Target ID | External Editor | Exported Standard Artifacts |
+| --- | --- | --- |
+| `audition` | **Adobe Audition** | `stems/*.wav` + `audition-markers.csv` (Audition Markers Panel TSV) + `<session>.sesx` (Audition XML multitrack session) + `spectracraft-state.json` |
+| `logic` | **Logic Pro** | `stems/*.wav` + `logic-markers.csv` (sample-accurate marker CSV) + `logic-interchange.json` (AU/ARA stem + marker + preset descriptor) + `spectracraft-state.json` |
+| `daw` | **Standard DAW / Audio Editor** | `stems/*.wav` + `markers.csv` (RFC-4180 CSV) + `daw-interchange.json` + `spectracraft-state.json` |
+| `soundcraft` | **ArtCraft SoundCraft** | `Audio Files/*.wav` + `<session>.scraft.json` (aligned with `craft-scraft-format` `Source`, `TrackKind::Audio`, and `MemoryLocation`) + `spectracraft-state.json` |
+
+CLI usage:
+
+```sh
+target/release/spectracraft-qa export-daw audition   dry.wav final.wav out-audition/   cues.json "Session Title" 24
+target/release/spectracraft-qa export-daw logic      dry.wav final.wav out-logic/      cues.json "Session Title" 24
+target/release/spectracraft-qa export-daw daw        dry.wav final.wav out-daw/        cues.json "Session Title" 32
+target/release/spectracraft-qa export-daw soundcraft dry.wav final.wav out-soundcraft/ cues.json "Session Title" 24
+```
+
+You can also trigger any of the four targets directly from the workstation **Export** dialog (`POST /api/sessions/:id/daw-export`) or the Tauri IPC command `export_daw_interchange`. See [`PLUGIN_ARCHITECTURE.md`](./PLUGIN_ARCHITECTURE.md) for the full adapter interface and future VST3/AU/AAX host boundary.
+
+---
+
+## Running Tests & Verification
+
+```sh
+# Rust core, CLI, DAW interchange, blind report 20 Hz–20 kHz sweep, and solo-instrument tests
+cargo test --locked
 cargo fmt --all --check
 cargo clippy --locked --lib --bins --tests
+cargo audit
+
+# Native egui desktop tests
+cargo test --locked --features desktop --bin spectracraft-desktop
+
+# Source integrity fingerprint verification (regenerate after Rust source edits)
+target/release/spectracraft-qa verify-source spectracraft-mono spectracraft-mono/SOURCE-SHA256.json
+
+# Frontend TypeScript check, unit tests, and production bundle
+npm run lint
+npm run test:ts
+npm run build
 ```
 
 ## CLI Quick Reference
@@ -99,14 +218,18 @@ cargo clippy --locked --lib --bins --tests
 target/release/spectracraft-mono analyze-guitar input.wav cues.json
 target/release/spectracraft-mono render-dry-guitar cues.json dry.wav
 
-# Verification & reporting
+# Verification, blind technical reporting, DAW interchange & settings
 target/release/spectracraft-qa guitar-verify input.wav verify-out/
+target/release/spectracraft-qa technical-report raw.wav final.wav report.json
+target/release/spectracraft-qa export-report report.json report.pdf pdf
+target/release/spectracraft-qa export-daw soundcraft dry.wav final.wav out-soundcraft/
+target/release/spectracraft-qa check-craft-libs --online
+target/release/spectracraft-qa update-check . --online
+target/release/spectracraft-qa settings-get
 ```
-
-See [`spectracraft-mono/README.md`](./spectracraft-mono/README.md), [`spectracraft-mono/NATIVE-GUITAR.md`](./spectracraft-mono/NATIVE-GUITAR.md), and [`spectracraft-mono/REPRODUCE.md`](./spectracraft-mono/REPRODUCE.md) for full CLI workflows and verification commands.
 
 ## Scope and Limits
 
-- SpectraCraft is native Rust source code (CLI, QA, and `egui` desktop workstation), not a signed installer or forensic recovery tool.
-- Virtual microphone and room models are idealized synthesis/capture choices, not recovery of historical recording gear or rooms.
-- Rendered outputs are candidates until reviewed by a human listener. See [`spectracraft-mono/README.md`](./spectracraft-mono/README.md) for platform verification scope.
+- Virtual microphone and room models are idealized synthesis/capture choices, not forensic recovery of historical recording gear or rooms.
+- Rendered outputs are candidates until reviewed by a human listener.
+- Mobile targets (iOS and Android) are configured via Tauri 2 (`src-tauri/`) with signing credentials intentionally excluded from version control.

@@ -303,10 +303,7 @@ pub fn estimate_signal_character(
     let mut quiet_gap_rms = Vec::new();
     for (idx, &rms) in frame_rms.iter().enumerate() {
         let t = idx as f64 * (frame_len as f64 / f64::from(sample_rate.max(1)));
-        let inside_note = perf
-            .notes
-            .iter()
-            .any(|n| t >= n.start && t <= n.end);
+        let inside_note = perf.notes.iter().any(|n| t >= n.start && t <= n.end);
         if !inside_note && rms > 1e-6 {
             quiet_gap_rms.push(rms);
         }
@@ -495,7 +492,12 @@ pub fn estimate_signal_character(
 
     // Loose mic style suggestion
     let (mic_id, mic_label, mic_conf, mic_note) = if perf.notes.is_empty() {
-        ("unclear", "Unclear", "Unclear", "No clear spectral cue for pickup distance.")
+        (
+            "unclear",
+            "Unclear",
+            "Unclear",
+            "No clear spectral cue for pickup distance.",
+        )
     } else if room_energy_estimate > 0.22 {
         (
             "distant",
@@ -595,6 +597,7 @@ mod tests {
             samples: rate as usize,
             hop_s: 0.005,
             notes: vec![Note {
+                string_id: None,
                 re_picks: None,
                 start: 0.1,
                 end: 0.8,

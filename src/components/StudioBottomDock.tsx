@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   ChevronDown,
@@ -30,6 +30,7 @@ import {
 } from '../lib/dryRegions.ts';
 import type { DryRegionEditResponse } from '../lib/studioRig.ts';
 import {
+  defaultGapRepairStartS,
   formatDbfs,
   shortHash,
   validateRepickInput,
@@ -46,6 +47,7 @@ export type BottomDockTab = 'shape' | 'regions' | 'layers' | 'cues' | 'repair' |
 interface StudioBottomDockProps {
   collapsed: boolean;
   bodyHeightPx?: number;
+  embeddedInSidePanel?: boolean;
   onToggleCollapse: () => void;
   activeTab: BottomDockTab;
   onTabChange: (tab: BottomDockTab) => void;
@@ -63,6 +65,8 @@ interface StudioBottomDockProps {
   onAnalyzeLayers: () => void;
   layersBusy: boolean;
   hasLayerStems: boolean;
+  layerMixPlaying?: boolean;
+  onToggleLayerMixPlay?: () => void;
   // Cues
   notes: NoteSummary[];
   cuePatches: Record<number, NoteEditPatch>;
@@ -103,11 +107,16 @@ interface StudioBottomDockProps {
   regionPreviewAb?: 'after' | 'before';
   onToggleRegionPreviewPlay?: () => void;
   onChangeRegionPreviewAb?: (mode: 'after' | 'before') => void;
+  onGenerateReport?: () => void;
+  onOpenReport?: () => void;
+  hasReport?: boolean;
+  reportBusy?: boolean;
 }
 
 export function StudioBottomDock({
   collapsed,
   bodyHeightPx = 172,
+  embeddedInSidePanel = false,
   onToggleCollapse,
   activeTab,
   onTabChange,
@@ -124,6 +133,8 @@ export function StudioBottomDock({
   onAnalyzeLayers,
   layersBusy,
   hasLayerStems,
+  layerMixPlaying = false,
+  onToggleLayerMixPlay,
   notes,
   cuePatches,
   onUpdateCuePatch,
@@ -159,14 +170,30 @@ export function StudioBottomDock({
   regionPreviewAb = 'after',
   onToggleRegionPreviewPlay,
   onChangeRegionPreviewAb,
+  onGenerateReport,
+  onOpenReport,
+  hasReport = false,
+  reportBusy = false,
 }: StudioBottomDockProps) {
   const [selectedNoteIdx, setSelectedNoteIdx] = useState<number>(0);
   const [strikeOffset, setStrikeOffset] = useState('0.12');
   const [strikeStrength, setStrikeStrength] = useState('0.75');
   const [strikeErr, setStrikeErr] = useState<string | null>(null);
 
-  const [gapStartS, setGapStartS] = useState('12.000');
+  const [gapStartS, setGapStartS] = useState('1.600');
   const [gapMs, setGapMs] = useState('2.0');
+
+  useEffect(() => {
+    if (!session) return;
+    const nextStart = defaultGapRepairStartS(
+      session.verification.duration_s,
+      selection,
+      Number(gapMs) || 2.0,
+    );
+    setGapStartS(nextStart.toFixed(3));
+    // Intentionally sync default start time when session or time selection changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.verification.duration_s, selection?.[0], selection?.[1]]);
 
   const passedCount = countPassedDryCriteria(dryChecklist);
   const dryApproved = isDryListeningPassed(dryChecklist);
@@ -176,31 +203,40 @@ export function StudioBottomDock({
     [notes, session?.transitionEvidence],
   );
 
-  const tabs: { id: BottomDockTab; label: string }[] = [
-    {
-      id: 'shape',
-      label: referenceShape
-        ? `Reference Shape & Prompt (${referenceShape.pitch_trajectory.note_count}n)`
-        : 'Reference Shape & Prompt',
-    },
-    {
-      id: 'regions',
-      label: `Region Edits · Dry (${dryRegions.length})`,
-    },
-    { id: 'layers', label: 'Editable Layers (4)' },
-    { id: 'cues', label: `Performance Cues (${notes.length})` },
-    { id: 'repair', label: 'Local Repair' },
-    {
-      id: 'review',
-      label: dryApproved
-        ? 'Dry Listening Gate · 5/5 Passed'
-        : `Dry Listening Gate · ${passedCount}/5`,
-    },
-  ];
+  const tabs: { id: BottomDockTab; label: string }[] = embeddedInSidePanel
+    ? [
+        { id: 'shape', label: 'Shape' },
+        { id: 'regions', label: `Regions (${dryRegions.length})` },
+        { id: 'layers', label: 'Layers' },
+        { id: 'cues', label: `Cues (${notes.length})` },
+        { id: 'repair', label: 'Repair' },
+        { id: 'review', label: dryApproved ? 'Gate 5/5' : `Gate ${passedCount}/5` },
+      ]
+    : [
+        {
+          id: 'shape',
+          label: referenceShape
+            ? `Reference Shape & Prompt (${referenceShape.pitch_trajectory.note_count}n)`
+            : 'Reference Shape & Prompt',
+        },
+        {
+          id: 'regions',
+          label: `Region Edits · Dry (${dryRegions.length})`,
+        },
+        { id: 'layers', label: 'Editable Layers (4)' },
+        { id: 'cues', label: `Performance Cues (${notes.length})` },
+        { id: 'repair', label: 'Local Repair' },
+        {
+          id: 'review',
+          label: dryApproved
+            ? 'Dry Listening Gate · 5/5 Passed'
+            : `Dry Listening Gate · ${passedCount}/5`,
+        },
+      ];
 
   const selectedRegion = dryRegions.find((r) => r.id === selectedRegionId) ?? dryRegions[0] ?? null;
 
-  const activeNote = notes[selectedNoteIdx] ?? null;
+  const activeNote = notes.find((n) => n.index === selectedNoteIdx) ?? notes[0] ?? null;
   const activePatch: NoteEditPatch | null = activeNote
     ? cuePatches[activeNote.index] ?? {
         index: activeNote.index,
@@ -210,49 +246,77 @@ export function StudioBottomDock({
     : null;
 
   return (
-    <div className="bg-[#242424] border-t border-[#3c3c3c] flex flex-col shrink-0">
+    <div
+      className={
+        embeddedInSidePanel
+          ? 'flex-1 min-h-0 flex flex-col bg-[#1e2025]'
+          : 'bg-[#242424] border-t border-[#3c3c3c] flex flex-col shrink-0'
+      }
+    >
       {/* Dock Tab Bar */}
-      <div className="h-7 bg-[#2b2b2b] border-b border-[#383838] flex items-center justify-between px-1.5">
-        <div className="flex items-center h-full">
+      <div
+        className={
+          embeddedInSidePanel
+            ? 'bg-[#25272d] border-b border-[#363942] flex flex-wrap items-center gap-0.5 px-1.5 py-1 shrink-0'
+            : 'h-7 bg-[#2b2b2b] border-b border-[#383838] flex items-center justify-between px-1.5'
+        }
+      >
+        <div className={embeddedInSidePanel ? 'flex flex-wrap items-center gap-0.5' : 'flex items-center h-full'}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => {
                 onTabChange(tab.id);
-                if (collapsed) onToggleCollapse();
+                if (!embeddedInSidePanel && collapsed) onToggleCollapse();
               }}
-              className={`h-full px-3 text-[11px] font-medium border-r border-[#383838] transition-colors ${
-                !collapsed && activeTab === tab.id
-                  ? 'bg-[#242424] text-white border-t-2 border-t-[#378ef0]'
-                  : tab.id === 'review' && !dryApproved && session
-                    ? 'text-[#e5b96c] hover:text-white hover:bg-[#333333]'
-                    : 'text-[#a3a3a3] hover:text-[#e0e0e0] hover:bg-[#333333]'
-              }`}
+              className={
+                embeddedInSidePanel
+                  ? `px-2 py-0.5 text-[10px] font-medium border transition-colors ${
+                      activeTab === tab.id
+                        ? 'bg-[#2f6ec4] border-[#378ef0] text-white'
+                        : tab.id === 'review' && !dryApproved && session
+                          ? 'bg-[#2a2c33] border-[#3e424d] text-[#e5b96c] hover:text-white'
+                          : 'bg-[#2a2c33] border-[#3a3e48] text-[#aeb6c4] hover:text-[#eef2f9] hover:bg-[#333741]'
+                    }`
+                  : `h-full px-3 text-[11px] font-medium border-r border-[#383838] transition-colors ${
+                      !collapsed && activeTab === tab.id
+                        ? 'bg-[#242424] text-white border-t-2 border-t-[#378ef0]'
+                        : tab.id === 'review' && !dryApproved && session
+                          ? 'text-[#e5b96c] hover:text-white hover:bg-[#333333]'
+                          : 'text-[#a3a3a3] hover:text-[#e0e0e0] hover:bg-[#333333]'
+                    }`
+              }
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="px-2 py-0.5 text-[#a0a0a0] hover:text-white flex items-center gap-1 text-[11px]"
-          title={collapsed ? 'Expand dock' : 'Collapse dock'}
-        >
-          {collapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
+        {!embeddedInSidePanel && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="px-2 py-0.5 text-[#a0a0a0] hover:text-white flex items-center gap-1 text-[11px]"
+            title={collapsed ? 'Expand dock' : 'Collapse dock'}
+          >
+            {collapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        )}
       </div>
 
       {/* Dock Body */}
-      {!collapsed && (
+      {(embeddedInSidePanel || !collapsed) && (
         <div
-          style={{ height: `${Math.max(84, bodyHeightPx)}px` }}
-          className="overflow-y-auto p-2.5 text-[11px]"
+          style={embeddedInSidePanel ? undefined : { height: `${Math.max(84, bodyHeightPx)}px` }}
+          className={
+            embeddedInSidePanel
+              ? 'flex-1 min-h-0 overflow-y-auto p-2.5 text-[11px]'
+              : 'overflow-y-auto p-2.5 text-[11px]'
+          }
         >
           {!session ? (
-            <div className="h-full flex items-center justify-center text-[#7c7c7c] font-mono">
+            <div className="h-full flex items-center justify-center text-[#7c7c7c] font-mono text-center px-3">
               Open a single-source mono WAV to extract reference shape, edit cues, and synthesize a fresh dry take.
             </div>
           ) : activeTab === 'shape' ? (
@@ -261,7 +325,13 @@ export function StudioBottomDock({
                 Extracting Reference Shape in Rust (pitch trajectory, dynamics, 6-band envelope, harmonic/noise balance, uncertainty)…
               </div>
             ) : (
-              <div className="grid grid-cols-[1.15fr_1fr] gap-2.5 h-full">
+              <div
+                className={
+                  embeddedInSidePanel
+                    ? 'grid grid-cols-1 gap-2.5'
+                    : 'grid grid-cols-[1.15fr_1fr] gap-2.5 h-full'
+                }
+              >
                 {/* Left: Extracted Reference Shape (Rust · Read-Only Signal Evidence) */}
                 <div className="bg-[#1e1e1e] border border-[#343434] p-2 overflow-y-auto space-y-2">
                   <div className="flex items-center justify-between border-b border-[#2e2e2e] pb-1">
@@ -562,7 +632,13 @@ export function StudioBottomDock({
               </div>
             )
           ) : activeTab === 'regions' ? (
-            <div className="grid grid-cols-[260px_1fr] gap-2.5 h-full">
+            <div
+              className={
+                embeddedInSidePanel
+                  ? 'grid grid-cols-1 gap-2.5'
+                  : 'grid grid-cols-[260px_1fr] gap-2.5 h-full'
+              }
+            >
               {/* Left: Marked Regions List + Add / Undo / Redo */}
               <div className="bg-[#1e1e1e] border border-[#343434] flex flex-col min-h-0">
                 <div className="px-2 py-1 bg-[#262626] border-b border-[#343434] flex items-center justify-between gap-1">
@@ -840,11 +916,12 @@ export function StudioBottomDock({
             </div>
           ) : activeTab === 'layers' ? (
             <div className="flex flex-col gap-2 h-full">
-              <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-[#343434]">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-[#343434]">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     disabled={layersBusy}
+                    data-testid="layers-analyze-btn"
                     onClick={onAnalyzeLayers}
                     className="px-2.5 py-1 bg-[#378ef0] hover:bg-[#2c7ad4] disabled:bg-[#3a3a3a] text-white font-medium"
                   >
@@ -852,11 +929,39 @@ export function StudioBottomDock({
                       ? 'Analyzing Rust Layers…'
                       : selection
                         ? `Analyze Selection (${selection[0].toFixed(2)}–${selection[1].toFixed(2)} s)`
-                        : 'Analyze Excerpt (20.0–27.0 s)'}
+                        : (() => {
+                            const dur = session.verification.duration_s;
+                            const s0 = Math.min(20, Math.max(0, dur - 7));
+                            const s1 = Math.min(dur, s0 + 7);
+                            return `Analyze Excerpt (${s0.toFixed(1)}–${s1.toFixed(1)} s)`;
+                          })()}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!hasLayerStems || layersBusy}
+                    data-testid="layers-play-mix-btn"
+                    onClick={onToggleLayerMixPlay}
+                    className={`px-2 py-1 border flex items-center gap-1 font-medium disabled:opacity-35 ${
+                      layerMixPlaying
+                        ? 'bg-[#c94b4b] border-[#c94b4b] text-white'
+                        : 'bg-[#2a2a2a] border-[#424242] text-[#e0e0e0] hover:bg-[#363636]'
+                    }`}
+                    title="Audition active layer stems using M / S / Gain / Texture controls (inspection only)"
+                  >
+                    {layerMixPlaying ? (
+                      <>
+                        <Square className="w-3 h-3" /> Stop Layer Mix
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3 h-3" /> Play Layer Mix
+                      </>
+                    )}
                   </button>
                   <label className="flex items-center gap-1.5 text-[#bdbdbd] cursor-pointer">
                     <input
                       type="checkbox"
+                      data-testid="layers-include-texture-toggle"
                       checked={includeTexture}
                       onChange={(e) => onToggleIncludeTexture(e.target.checked)}
                       className="accent-[#378ef0] w-3 h-3"
@@ -1262,6 +1367,27 @@ export function StudioBottomDock({
                     >
                       <FileJson className="w-3 h-3" /> Cues JSON
                     </a>
+                  )}
+                  {onGenerateReport && (
+                    <button
+                      type="button"
+                      disabled={reportBusy}
+                      data-testid="dock-generate-report-btn"
+                      onClick={onGenerateReport}
+                      className="px-2 py-1 bg-[#1f2c3d] hover:bg-[#273a52] border border-[#355378] text-[#cfe4ff] disabled:opacity-40"
+                    >
+                      {reportBusy ? 'Auditing…' : 'Generate Report'}
+                    </button>
+                  )}
+                  {hasReport && onOpenReport && (
+                    <button
+                      type="button"
+                      data-testid="dock-open-report-btn"
+                      onClick={onOpenReport}
+                      className="px-2 py-1 bg-[#1b3048] hover:bg-[#244061] border border-[#3b6ca3] text-[#dcebff]"
+                    >
+                      View Report
+                    </button>
                   )}
                   <button
                     type="button"

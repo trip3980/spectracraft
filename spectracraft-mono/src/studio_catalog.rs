@@ -761,7 +761,6 @@ pub fn source_catalog() -> Vec<SourceEntry> {
         .clone()
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transducer {
     Dynamic,
@@ -1079,6 +1078,22 @@ impl SurfaceEntry {
     /// `sqrt(1.0 - effective_absorption)`.
     pub fn pressure_reflectance(&self) -> [f64; 6] {
         self.effective_absorption().map(|a| (1.0 - a).sqrt())
+    }
+    /// Oblique-incidence pressure reflectance per octave band `[125, 250, 500, 1000, 2000, 4000]` Hz.
+    /// Uses Johnson-Champoux-Allard (JCA) porous impedance physics strictly when all required
+    /// Biot parameters and thickness are published; falls back cleanly to published ASTM C423
+    /// `pressure_reflectance()` otherwise (never invents unpublished parameters).
+    pub fn oblique_pressure_reflectance(&self, incidence_rad: f64) -> [f64; 6] {
+        let fallback = self.pressure_reflectance();
+        std::array::from_fn(|b| {
+            crate::acoustics_physics::jca_reflection_magnitude(
+                BANDS_HZ[b],
+                incidence_rad,
+                self.thickness_mm,
+                &self.biot,
+            )
+            .unwrap_or(fallback[b])
+        })
     }
     /// Mean pressure reflectance across the 6 octave bands (for compact list display).
     pub fn mean_reflectance(&self) -> f64 {
@@ -1437,9 +1452,21 @@ impl StudioRig {
     pub fn source_pos_m(&self) -> [f32; 3] {
         let [w, d, h] = self.dimensions_m;
         let base_z = (5.0 * FEET_TO_METRES).min((h - 0.25).max(0.25));
-        let ox = if self.source_lock_center_xy { 0.0 } else { self.source_offset_m[0] };
-        let oy = if self.source_lock_center_xy { 0.0 } else { self.source_offset_m[1] };
-        let oz = if self.source_lock_height_5ft { 0.0 } else { self.source_offset_m[2] };
+        let ox = if self.source_lock_center_xy {
+            0.0
+        } else {
+            self.source_offset_m[0]
+        };
+        let oy = if self.source_lock_center_xy {
+            0.0
+        } else {
+            self.source_offset_m[1]
+        };
+        let oz = if self.source_lock_height_5ft {
+            0.0
+        } else {
+            self.source_offset_m[2]
+        };
         let x = (w * 0.5 + if ox.is_finite() { ox } else { 0.0 }).clamp(0.15, (w - 0.15).max(0.15));
         let y = (d * 0.5 + if oy.is_finite() { oy } else { 0.0 }).clamp(0.15, (d - 0.15).max(0.15));
         let z = (base_z + if oz.is_finite() { oz } else { 0.0 }).clamp(0.15, (h - 0.15).max(0.15));
@@ -1785,6 +1812,13 @@ pub fn capture_paths_6band(
     let mut last_path = direct_delay;
     let order_lim = max_order.clamp(0, 5);
 
+    let active_mic_entry = mics.get(slot.catalog_index);
+    let published_offaxis = if slot.pattern_override.is_none() {
+        active_mic_entry.and_then(|m| m.published_offaxis.as_ref())
+    } else {
+        None
+    };
+
     if any_reflective && order_lim > 0 {
         for ix in -order_lim..=order_lim {
             for iy in -order_lim..=order_lim {
@@ -1818,29 +1852,84 @@ pub fn capture_paths_6band(
                     }
                     let cos_mic =
                         (to_img[0] * aim[0] + to_img[1] * aim[1] + to_img[2] * aim[2]) / travel;
-                    let mic_g = directivity.pressure(cos_mic).unwrap_or(0.0);
+                    let mic_g_6band = published_offaxis
+                        .and_then(|tbl| {
+                            crate::acoustics_physics::offaxis_6band_pressure(tbl, cos_mic, mic_pat)
+                        })
+                        .unwrap_or_else(|| [directivity.pressure(cos_mic).unwrap_or(0.0); 6]);
                     // Reflection parity on source forward axis (+Y)
                     let y_parity = if iy % 2 == 0 { 1.0 } else { -1.0 };
                     let cos_src = ((-to_img[1]) / travel) * y_parity;
                     let src_g = src_rad.gain(cos_src);
                     let spread = dist / travel;
-                    let scalar = spread * src_g * mic_g;
-                    if scalar.abs() < 1e-5 {
+                    let base_scalar = spread * src_g;
+                    if base_scalar.abs() < 1e-5 {
                         continue;
                     }
+                    let air_6band = crate::acoustics_physics::air_absorption_amplitude_6band(
+                        (travel - dist).max(0.0),
+                        f64::from(r.temperature_c),
+                        50.0,
+                    );
                     let (nx, px) = axis_hits(ix);
                     let (ny, py) = axis_hits(iy);
                     let (nz, pz) = axis_hits(iz);
+                    // Per-axis oblique incidence angles against wall normals (X, Y, Z) for JCA porous surfaces
+                    let theta_x = (to_img[0].abs() / travel).clamp(0.05, 1.0).acos();
+                    let theta_y = (to_img[1].abs() / travel).clamp(0.05, 1.0).acos();
+                    let theta_z = (to_img[2].abs() / travel).clamp(0.05, 1.0).acos();
+                    let face_oblique = |face_idx: usize, theta: f64| -> [f64; 6] {
+                        if r.room_preset == RoomPreset::Direct
+                            || (r.room_preset == RoomPreset::Open && face_idx != 4)
+                        {
+                            return [0.0; 6];
+                        }
+                        surfaces
+                            .get(r.surface_faces[face_idx])
+                            .map(|s| s.oblique_pressure_reflectance(theta))
+                            .unwrap_or(faces_r[face_idx])
+                    };
+                    let rx_neg = if nx > 0 {
+                        face_oblique(0, theta_x)
+                    } else {
+                        [1.0; 6]
+                    };
+                    let rx_pos = if px > 0 {
+                        face_oblique(1, theta_x)
+                    } else {
+                        [1.0; 6]
+                    };
+                    let ry_neg = if ny > 0 {
+                        face_oblique(2, theta_y)
+                    } else {
+                        [1.0; 6]
+                    };
+                    let ry_pos = if py > 0 {
+                        face_oblique(3, theta_y)
+                    } else {
+                        [1.0; 6]
+                    };
+                    let rz_neg = if nz > 0 {
+                        face_oblique(4, theta_z)
+                    } else {
+                        [1.0; 6]
+                    };
+                    let rz_pos = if pz > 0 {
+                        face_oblique(5, theta_z)
+                    } else {
+                        [1.0; 6]
+                    };
+
                     let mut band_gains = [0.0_f64; 6];
                     let mut max_abs = 0.0_f64;
                     for b in 0..6 {
-                        let refl = faces_r[0][b].powi(nx)
-                            * faces_r[1][b].powi(px)
-                            * faces_r[2][b].powi(ny)
-                            * faces_r[3][b].powi(py)
-                            * faces_r[4][b].powi(nz)
-                            * faces_r[5][b].powi(pz);
-                        let g = scalar * refl;
+                        let refl = rx_neg[b].powi(nx)
+                            * rx_pos[b].powi(px)
+                            * ry_neg[b].powi(ny)
+                            * ry_pos[b].powi(py)
+                            * rz_neg[b].powi(nz)
+                            * rz_pos[b].powi(pz);
+                        let g = base_scalar * mic_g_6band[b] * refl * air_6band[b];
                         band_gains[b] = g;
                         max_abs = max_abs.max(g.abs());
                     }
@@ -1883,12 +1972,14 @@ pub fn capture_paths_6band(
 /// Exact complementary 6-band 1-pole crossover splitter:
 /// `band[0] = lp(c0)`, `band[k] = lp(ck) - lp(c_{k-1})`, `band[5] = x - lp(c4)`.
 /// Summing all 6 bands equals `x` identically at every sample!
+#[cfg(test)]
 struct SixBandSplit {
     cutoffs_hz: [f64; 5],
     alphas: [f64; 5],
     state: [f64; 5],
 }
 
+#[cfg(test)]
 impl SixBandSplit {
     fn new(sample_rate: u32) -> Self {
         // Geometric midpoints between [125, 250, 500, 1000, 2000, 4000] Hz
@@ -1929,22 +2020,54 @@ impl SixBandSplit {
     }
 }
 
-/// Render a mono dry signal through a 6-band `CapturePlan6` with linear fractional-delay taps
-/// and exact complementary 6-band splitting. No implicit normalization, limiter, noise, or dither.
+/// Render a mono dry signal through a 6-band `CapturePlan6` with 4-tap cubic Lagrange
+/// fractional-delay taps (Laakso et al. 1996) and exact complementary 6-band splitting.
+/// Output matches `input.len()` for real-time/in-place buffer compatibility.
 pub fn render_capture_6band(input: &[f32], rate: u32, plan: &CapturePlan6) -> Vec<f32> {
+    render_capture_6band_len(input, rate, plan, input.len())
+}
+
+/// Render a mono dry signal through a 6-band `CapturePlan6` preserving the complete
+/// geometric reflection tail plus optional `extra_tail_s` (for offline WAV export).
+pub fn render_capture_6band_with_tail(
+    input: &[f32],
+    rate: u32,
+    plan: &CapturePlan6,
+    extra_tail_s: f64,
+) -> Vec<f32> {
     if input.is_empty() {
+        return Vec::new();
+    }
+    let fs = f64::from(rate.max(1));
+    let tail_samples = ((plan.last_path_s.max(0.0) + extra_tail_s.max(0.0)) * fs).ceil() as usize;
+    let out_len = input.len() + tail_samples.min(rate.max(1) as usize * 12);
+    render_capture_6band_len(input, rate, plan, out_len)
+}
+
+fn render_capture_6band_len(
+    input: &[f32],
+    rate: u32,
+    plan: &CapturePlan6,
+    out_len: usize,
+) -> Vec<f32> {
+    if input.is_empty() || out_len == 0 {
         return Vec::new();
     }
     let n = input.len();
     let safe_rate = rate.max(1);
-    let mut splitter = SixBandSplit::new(safe_rate);
+    let clean_in: Vec<f64> = input
+        .iter()
+        .map(|&s| if s.is_finite() { f64::from(s) } else { 0.0 })
+        .collect();
+    // 24 dB/oct Linkwitz-Riley 4th-order crossover isolates octave-band room reflections cleanly,
+    // while order==0 direct arrival bypasses crossover splitting for zero-lag sample alignment.
+    let mut splitter = crate::acoustics_physics::Lr4SixBandSplit::new(safe_rate);
     let mut bands = vec![[0.0_f64; 6]; n];
-    for (i, &s) in input.iter().enumerate() {
-        let clean = if s.is_finite() { f64::from(s) } else { 0.0 };
+    for (i, &clean) in clean_in.iter().enumerate() {
         bands[i] = splitter.split(clean);
     }
 
-    let mut out = vec![0.0_f64; n];
+    let mut out = vec![0.0_f64; out_len];
     let fs = f64::from(safe_rate);
     for path in &plan.paths {
         let d_samp = path.delay_s * fs;
@@ -1952,7 +2075,7 @@ pub fn render_capture_6band(input: &[f32], rate: u32, plan: &CapturePlan6) -> Ve
             continue;
         }
         let d0 = d_samp.floor() as usize;
-        if d0 >= n {
+        if d0 >= out_len {
             continue;
         }
         let g = path.band_gains;
@@ -1960,15 +2083,29 @@ pub fn render_capture_6band(input: &[f32], rate: u32, plan: &CapturePlan6) -> Ve
             continue;
         }
         let frac = d_samp - d0 as f64;
-        let w0 = 1.0 - frac;
-        let w1 = frac;
-        for (src_i, b) in bands.iter().enumerate().take(n - d0) {
-            let v =
-                b[0] * g[0] + b[1] * g[1] + b[2] * g[2] + b[3] * g[3] + b[4] * g[4] + b[5] * g[5];
+        let lag = crate::acoustics_physics::lagrange4_weights(frac);
+        let max_src = n.min(out_len - d0);
+        let direct_flat = path.order == 0;
+        for src_i in 0..max_src {
+            let v = if direct_flat {
+                clean_in[src_i] * g[0]
+            } else {
+                let b = bands[src_i];
+                b[0] * g[0] + b[1] * g[1] + b[2] * g[2] + b[3] * g[3] + b[4] * g[4] + b[5] * g[5]
+            };
             let dst = src_i + d0;
-            out[dst] += v * w0;
-            if w1 > 0.0 && dst + 1 < n {
-                out[dst + 1] += v * w1;
+            if frac <= 1e-12 {
+                out[dst] += v;
+            } else if dst >= 1 && dst + 2 < out_len {
+                out[dst - 1] += v * lag[0];
+                out[dst] += v * lag[1];
+                out[dst + 1] += v * lag[2];
+                out[dst + 2] += v * lag[3];
+            } else {
+                out[dst] += v * (1.0 - frac);
+                if dst + 1 < out_len {
+                    out[dst + 1] += v * frac;
+                }
             }
         }
     }
@@ -2113,7 +2250,11 @@ mod tests {
         assert!((base.source_pos_m()[2] - 5.0 * FEET_TO_METRES).abs() < 1e-5);
         assert_eq!(
             RoomPreset::Open.dimensions_m(),
-            [50. * FEET_TO_METRES, 50. * FEET_TO_METRES, 50. * FEET_TO_METRES]
+            [
+                50. * FEET_TO_METRES,
+                50. * FEET_TO_METRES,
+                50. * FEET_TO_METRES
+            ]
         );
 
         let render = |rig: &StudioRig| {
@@ -2158,7 +2299,10 @@ mod tests {
         // 4. Independent pickup pattern override -> real audio changes without changing mic model
         let mut pat_changed = base.clone();
         pat_changed.active_mic_mut().pattern_override = Some(Pattern::Figure8);
-        assert_eq!(pat_changed.active_mic().catalog_index, base.active_mic().catalog_index);
+        assert_eq!(
+            pat_changed.active_mic().catalog_index,
+            base.active_mic().catalog_index
+        );
         assert!(rms_diff(&y_base, &render(&pat_changed)) > 1e-4);
 
         // 5. Switch ONLY display units & visual-only pattern overlay -> BIT-IDENTICAL audio!
@@ -2183,7 +2327,8 @@ mod tests {
                 let env = (-t * 110.0).exp();
                 (env * ((2.0 * std::f64::consts::PI * 196.0 * t).sin()
                     + 0.45 * (2.0 * std::f64::consts::PI * 588.0 * t).sin()
-                    + 0.25 * (2.0 * std::f64::consts::PI * 1764.0 * t).sin())) as f32
+                    + 0.25 * (2.0 * std::f64::consts::PI * 1764.0 * t).sin()))
+                    as f32
             })
             .collect();
         let render = |rig: &StudioRig| {
@@ -2275,10 +2420,16 @@ mod tests {
         rig.active_mic_mut().offset_m = [0.0, 0.0, 0.0];
         rig.set_source_pos_m([999.0, -999.0, f32::NAN]);
         rig.clamp_all();
-        assert!(rig.dimensions_m.iter().all(|d| d.is_finite() && *d >= 1.5 && *d <= 40.0));
+        assert!(rig
+            .dimensions_m
+            .iter()
+            .all(|d| d.is_finite() && *d >= 1.5 && *d <= 40.0));
         let off = rig.active_mic().offset_m;
         let dist = (off[0] * off[0] + off[1] * off[1] + off[2] * off[2]).sqrt();
-        assert!(dist >= 0.199, "mic on source must clamp to >= 0.20 m separation");
+        assert!(
+            dist >= 0.199,
+            "mic on source must clamp to >= 0.20 m separation"
+        );
 
         // Out-of-range and NaN surface absorption
         let weird_surf = SurfaceEntry {
@@ -2436,9 +2587,15 @@ mod tests {
         open_a.apply_preset(RoomPreset::Open);
         let mut open_b = open_a.clone();
         open_b.surface_faces[0] = 28; // sheet steel on -X wall (ignored in Open mode)
-        let open_plan_a = capture_paths_6band(&open_a, &sources, &mics, &surfaces, 2, Timing::AlignDirect);
-        let open_plan_b = capture_paths_6band(&open_b, &sources, &mics, &surfaces, 2, Timing::AlignDirect);
-        assert_eq!(open_plan_a.paths.len(), 2, "Open preset has direct + single ground bounce");
+        let open_plan_a =
+            capture_paths_6band(&open_a, &sources, &mics, &surfaces, 2, Timing::AlignDirect);
+        let open_plan_b =
+            capture_paths_6band(&open_b, &sources, &mics, &surfaces, 2, Timing::AlignDirect);
+        assert_eq!(
+            open_plan_a.paths.len(),
+            2,
+            "Open preset has direct + single ground bounce"
+        );
         assert_eq!(
             render_capture_6band(&dry, 48_000, &open_plan_a),
             render_capture_6band(&dry, 48_000, &open_plan_b),
@@ -2447,7 +2604,8 @@ mod tests {
         // Changing ground material in Open mode MUST change reflected capture
         let mut open_c = open_a.clone();
         open_c.surface_faces[4] = 31; // asphalt instead of grass over soil
-        let open_plan_c = capture_paths_6band(&open_c, &sources, &mics, &surfaces, 2, Timing::AlignDirect);
+        let open_plan_c =
+            capture_paths_6band(&open_c, &sources, &mics, &surfaces, 2, Timing::AlignDirect);
         assert_ne!(
             render_capture_6band(&dry, 48_000, &open_plan_a),
             render_capture_6band(&dry, 48_000, &open_plan_c),
@@ -2479,7 +2637,14 @@ mod tests {
                 let out = render_capture_6band(
                     &dry,
                     48_000,
-                    &capture_paths_6band(&mutated, &sources, &mics, &surfaces, 2, Timing::AlignDirect),
+                    &capture_paths_6band(
+                        &mutated,
+                        &sources,
+                        &mics,
+                        &surfaces,
+                        2,
+                        Timing::AlignDirect,
+                    ),
                 );
                 assert_eq!(
                     out, base_out,
@@ -2524,6 +2689,7 @@ mod tests {
             samples: 24_000,
             hop_s: 0.005,
             notes: vec![crate::reperform::Note {
+                string_id: None,
                 re_picks: None,
                 start: 0.05,
                 end: 0.40,

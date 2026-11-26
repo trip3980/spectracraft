@@ -56,7 +56,9 @@ pub fn user_home_dir() -> Option<PathBuf> {
         if let Some(p) = std::env::var_os("USERPROFILE").filter(|v| !v.is_empty()) {
             return Some(PathBuf::from(p));
         }
-        if let (Some(drive), Some(path)) = (std::env::var_os("HOMEDRIVE"), std::env::var_os("HOMEPATH")) {
+        if let (Some(drive), Some(path)) =
+            (std::env::var_os("HOMEDRIVE"), std::env::var_os("HOMEPATH"))
+        {
             let mut combined = drive;
             combined.push(path);
             if !combined.is_empty() {
@@ -145,6 +147,17 @@ pub const fn redo_shortcut_label() -> &'static str {
     }
 }
 
+/// Clamp an optional `[start_sample, end_sample)` audio playback/viewport slice safely within `total_len`.
+pub fn clamp_playback_slice(
+    total_len: usize,
+    start_sample: usize,
+    end_sample: Option<usize>,
+) -> (usize, usize) {
+    let end = end_sample.unwrap_or(total_len).min(total_len);
+    let start = start_sample.min(end);
+    (start, end)
+}
+
 /// Native desktop file dialogs (Linux xdg-portal, Windows IFileDialog, macOS NSOpenPanel/NSSavePanel).
 #[cfg(feature = "desktop")]
 pub mod dialogs {
@@ -211,8 +224,7 @@ impl AudioPlayback {
         samples: Vec<f32>,
         started_at: f64,
     ) -> std::result::Result<Self, String> {
-        let (stream, handle) =
-            rodio::OutputStream::try_default().map_err(|e| format!("{e}"))?;
+        let (stream, handle) = rodio::OutputStream::try_default().map_err(|e| format!("{e}"))?;
         let sink = rodio::Sink::try_new(&handle).map_err(|e| format!("{e}"))?;
         sink.append(rodio::buffer::SamplesBuffer::new(1, sample_rate, samples));
         Ok(Self {
@@ -220,6 +232,18 @@ impl AudioPlayback {
             sink,
             started_at,
         })
+    }
+
+    /// Starts mono playback from only the requested `[start_sample, end_sample)` slice without copying the full track.
+    pub fn play_mono_slice(
+        sample_rate: u32,
+        samples: &[f32],
+        start_sample: usize,
+        end_sample: Option<usize>,
+        started_at: f64,
+    ) -> std::result::Result<Self, String> {
+        let (s0, s1) = clamp_playback_slice(samples.len(), start_sample, end_sample);
+        Self::play_mono(sample_rate, samples[s0..s1].to_vec(), started_at)
     }
 
     /// Returns true once the queued audio buffer has finished playing.
@@ -253,8 +277,12 @@ pub fn run_native_window<F>(
     app_creator: F,
 ) -> eframe::Result<()>
 where
-    F: FnOnce(&eframe::CreationContext<'_>) -> std::result::Result<Box<dyn eframe::App>, Box<dyn std::error::Error + Send + Sync>>
-        + 'static,
+    F: FnOnce(
+            &eframe::CreationContext<'_>,
+        ) -> std::result::Result<
+            Box<dyn eframe::App>,
+            Box<dyn std::error::Error + Send + Sync>,
+        > + 'static,
 {
     eframe::run_native(
         title,
@@ -303,5 +331,13 @@ mod tests {
         assert!(!current_platform().label().is_empty());
         assert!(undo_shortcut_label().contains("Undo"));
         assert!(redo_shortcut_label().contains("Redo"));
+    }
+
+    #[test]
+    fn clamp_playback_slice_bounds_ranges_safely() {
+        assert_eq!(clamp_playback_slice(1000, 250, None), (250, 1000));
+        assert_eq!(clamp_playback_slice(1000, 250, Some(600)), (250, 600));
+        assert_eq!(clamp_playback_slice(1000, 1500, Some(2000)), (1000, 1000));
+        assert_eq!(clamp_playback_slice(1000, 800, Some(400)), (400, 400));
     }
 }

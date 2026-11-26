@@ -7,8 +7,8 @@
 //!   - Stage 4: Optional Space / Room Stage (OFF by default; defaults to 10x10x10 ft padded room)
 //!   - Stage 5: Optional Plugin / Processing Slot before final output (OFF / empty by default)
 //!
-//! Crash-safe file output uses vendored `craft_atomic::atomic_write` from `storytold/craft-libs`
-//! (MIT OR Apache-2.0, pinned rev b24eba64758f1b9135e7a3afab1af88260f9323b).
+//! Crash-safe file output uses pinned `craft_atomic::atomic_write` from `storytold/craft-libs`
+//! (MIT OR Apache-2.0, pinned rev 05b99ee5dcd64f2c954a693ef361301214ddc3c7) via `report_export.rs`.
 
 use crate::{
     capture, digest,
@@ -86,6 +86,10 @@ impl Default for PluginSlotConfig {
 pub struct PostDryPipelineConfig {
     /// Stage 3: Optional Microphone Stage (OFF by default).
     pub mic_enabled: bool,
+    /// Stage 3: Optional 2× oversampled studio tube/transformer preamp coloration (0.0..=1.0).
+    /// Defaults to `0.0` (strictly bypassed / bit-identical).
+    #[serde(default)]
+    pub preamp_drive: f64,
     /// Stage 4: Optional Space / Room Stage (OFF by default; defaults to 10x10x10 ft padded room).
     pub room_enabled: bool,
     /// Full 3D rig parameters (mic model/position/aim + room size/materials/source position).
@@ -98,6 +102,7 @@ impl Default for PostDryPipelineConfig {
     fn default() -> Self {
         Self {
             mic_enabled: false,
+            preamp_drive: 0.0,
             room_enabled: false,
             rig: StudioRig::sm7b_foam_reference(), // 10x10x10 ft padded room starting point
             plugin_slot: PluginSlotConfig::default(),
@@ -128,44 +133,154 @@ fn hash_f32_samples(samples: &[f32]) -> String {
     digest::sha256(&bytes)
 }
 
-/// Write a 32-bit float mono WAV crash-safely using vendored `craft_atomic::atomic_write`.
-/// Refuses non-finite (`NaN`/`Inf`) samples rather than silently coercing them to zero.
-pub fn write_wav_f32_atomic(path: &Path, rate: u32, samples: &[f32]) -> Result<()> {
+/// Integrity metadata computed from the in-memory WAV bytes written atomically to disk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AtomicWavReceipt {
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+fn write_wav_buf_atomic(
+    path: &Path,
+    spec: hound::WavSpec,
+    capacity: usize,
+    fill: impl FnOnce(&mut hound::WavWriter<&mut Cursor<Vec<u8>>>) -> Result<()>,
+) -> Result<AtomicWavReceipt> {
+    let mut cursor = Cursor::new(Vec::<u8>::with_capacity(capacity));
+    {
+        let mut writer = hound::WavWriter::new(&mut cursor, spec)?;
+        fill(&mut writer)?;
+        writer.finalize()?;
+    }
+    let buf = cursor.get_ref();
+    crate::report_export::atomic_write_bytes(path, buf)?;
+    Ok(AtomicWavReceipt {
+        sha256: digest::sha256(buf),
+        bytes: buf.len() as u64,
+    })
+}
+
+fn check_finite_mono(samples: &[f32]) -> Result<()> {
     if let Some((idx, &bad)) = samples.iter().enumerate().find(|(_, s)| !s.is_finite()) {
         return Err(format!("Refusing to write non-finite sample ({bad}) at index {idx}").into());
     }
-    let mut cursor = Cursor::new(Vec::<u8>::with_capacity(samples.len() * 4 + 64));
+    Ok(())
+}
+
+fn check_finite_stereo(audio: &capture::StereoAudio) -> Result<()> {
+    if audio.left.len() != audio.right.len() {
+        return Err("Stereo left and right channels must have equal length".into());
+    }
+    if audio.left.iter().any(|s| !s.is_finite()) || audio.right.iter().any(|s| !s.is_finite()) {
+        return Err("Refusing to write non-finite sample in stereo WAV".into());
+    }
+    Ok(())
+}
+
+/// Write a 32-bit float mono WAV crash-safely and return its SHA-256 & byte length without re-reading disk.
+pub fn write_wav_f32_atomic_with_hash(
+    path: &Path,
+    rate: u32,
+    samples: &[f32],
+) -> Result<AtomicWavReceipt> {
+    check_finite_mono(samples)?;
     let spec = hound::WavSpec {
         channels: 1,
         sample_rate: rate,
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
-    {
-        let mut writer = hound::WavWriter::new(&mut cursor, spec)?;
+    write_wav_buf_atomic(path, spec, samples.len() * 4 + 64, |w| {
         for &s in samples {
-            writer.write_sample(s)?;
+            w.write_sample(s)?;
         }
-        writer.finalize()?;
-    }
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
-    }
-    craft_atomic::atomic_write(path, cursor.get_ref())?;
-    Ok(())
+        Ok(())
+    })
 }
 
-/// Write UTF-8 JSON bytes crash-safely using vendored `craft_atomic::atomic_write`.
-pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
+/// Write a 32-bit float mono WAV crash-safely via `craft_atomic::atomic_write`.
+pub fn write_wav_f32_atomic(path: &Path, rate: u32, samples: &[f32]) -> Result<()> {
+    write_wav_f32_atomic_with_hash(path, rate, samples).map(|_| ())
+}
+
+/// Write a 32-bit float stereo WAV crash-safely via `craft_atomic::atomic_write`.
+pub fn write_wav_stereo_f32_atomic(
+    path: &Path,
+    rate: u32,
+    audio: &capture::StereoAudio,
+) -> Result<()> {
+    check_finite_stereo(audio)?;
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: rate,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
+    write_wav_buf_atomic(path, spec, audio.left.len() * 8 + 64, |w| {
+        for (&l, &r) in audio.left.iter().zip(audio.right.iter()) {
+            w.write_sample(l)?;
+            w.write_sample(r)?;
         }
-    }
-    craft_atomic::atomic_write(path, bytes)?;
-    Ok(())
+        Ok(())
+    })
+    .map(|_| ())
+}
+
+/// Write a 24-bit integer PCM mono WAV with TPDF dither crash-safely and return its SHA-256 & byte length.
+pub fn write_wav_i24_tpdf_atomic_with_hash(
+    path: &Path,
+    rate: u32,
+    samples: &[f32],
+) -> Result<AtomicWavReceipt> {
+    check_finite_mono(samples)?;
+    let q = crate::acoustics_physics::quantize_i24_tpdf(samples, 0x51a7_2401_u64);
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: rate,
+        bits_per_sample: 24,
+        sample_format: hound::SampleFormat::Int,
+    };
+    write_wav_buf_atomic(path, spec, samples.len() * 3 + 64, |w| {
+        for s in q {
+            w.write_sample(s)?;
+        }
+        Ok(())
+    })
+}
+
+/// Write a 24-bit integer PCM mono WAV with Triangular-PDF (TPDF) dither crash-safely.
+pub fn write_wav_i24_tpdf_atomic(path: &Path, rate: u32, samples: &[f32]) -> Result<()> {
+    write_wav_i24_tpdf_atomic_with_hash(path, rate, samples).map(|_| ())
+}
+
+/// Write a 24-bit integer PCM stereo WAV with uncorrelated per-channel TPDF dither crash-safely.
+pub fn write_wav_stereo_i24_tpdf_atomic(
+    path: &Path,
+    rate: u32,
+    audio: &capture::StereoAudio,
+) -> Result<()> {
+    check_finite_stereo(audio)?;
+    let ql = crate::acoustics_physics::quantize_i24_tpdf(&audio.left, 0x51a7_2401_u64);
+    let qr = crate::acoustics_physics::quantize_i24_tpdf(&audio.right, 0xa2c9_8843_u64);
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: rate,
+        bits_per_sample: 24,
+        sample_format: hound::SampleFormat::Int,
+    };
+    write_wav_buf_atomic(path, spec, audio.left.len() * 6 + 64, |w| {
+        for (l, r) in ql.into_iter().zip(qr.into_iter()) {
+            w.write_sample(l)?;
+            w.write_sample(r)?;
+        }
+        Ok(())
+    })
+    .map(|_| ())
+}
+
+/// Write UTF-8 JSON bytes crash-safely via `report_export::atomic_write_bytes` (`craft-atomic`).
+pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    crate::report_export::atomic_write_bytes(path, bytes)
 }
 
 /// Execute Stages 3 (Optional Mic), 4 (Optional Room), and 5 (Optional Plugin Slot)
@@ -221,10 +336,15 @@ pub fn run_post_dry_pipeline(
 
         let mut mixed = vec![0.0_f32; dry_samples.len()];
         let inv_count = 1.0 / (indices.len() as f32);
+        let eff_preamp = if cfg.mic_enabled {
+            cfg.preamp_drive
+        } else {
+            0.0
+        };
         for &mi in &indices {
             let mut slot_rig = effective_rig.clone();
             slot_rig.selected_mic = mi;
-            let rendered = capture::render_studio_rig_with_mic_eq(
+            let rendered = capture::render_studio_rig_with_options(
                 dry_samples,
                 rate,
                 &slot_rig,
@@ -232,6 +352,8 @@ pub fn run_post_dry_pipeline(
                 mics,
                 surfaces,
                 cfg.mic_enabled,
+                eff_preamp,
+                false,
             );
             for (dst, &v) in mixed.iter_mut().zip(rendered.iter()) {
                 *dst += v * inv_count;
@@ -253,6 +375,193 @@ pub fn run_post_dry_pipeline(
 
     PipelineRenderOutput {
         samples: signal,
+        summary: PipelineStageSummary {
+            dry_sha256,
+            output_sha256,
+            mic_stage_active: cfg.mic_enabled,
+            room_stage_active: cfg.room_enabled,
+            plugin_slot_active: plugin_active,
+            active_plugin: if plugin_active {
+                cfg.plugin_slot.plugin_id
+            } else {
+                PluginId::None
+            },
+            bypassed_stages,
+            bit_identical_to_dry,
+            original_audio_opened: false,
+        },
+    }
+}
+
+/// Complete studio-delivery stereo pipeline result with ITU-R BS.1770-4 loudness
+/// and 4× oversampled true-peak metering.
+pub struct StereoPipelineOutput {
+    pub audio: capture::StereoAudio,
+    pub loudness: crate::acoustics_physics::LoudnessMetrics,
+    pub summary: PipelineStageSummary,
+}
+
+/// Execute Stages 3, 4, and 5 in true stereo with constant-power multi-mic spatial panning
+/// (preserving physical inter-mic arrival time differences relative to the closest mic),
+/// decorrelated stereo Householder FDN late reverberation, optional un-truncated full room
+/// tail preservation (`preserve_tail = true` for offline studio WAV export), and ITU-R BS.1770-4
+/// loudness + 4× true-peak metering.
+pub fn run_post_dry_pipeline_stereo(
+    dry_samples: &[f32],
+    rate: u32,
+    cfg: &PostDryPipelineConfig,
+    sources: &[SourceEntry],
+    mics: &[MicEntry],
+    surfaces: &[SurfaceEntry],
+    preserve_tail: bool,
+) -> StereoPipelineOutput {
+    let dry_sha256 = hash_f32_samples(dry_samples);
+    let mut bypassed_stages = Vec::new();
+
+    let mut stereo = if !cfg.mic_enabled && !cfg.room_enabled {
+        bypassed_stages.push("microphone".into());
+        bypassed_stages.push("space_room".into());
+        capture::StereoAudio {
+            left: dry_samples.to_vec(),
+            right: dry_samples.to_vec(),
+        }
+    } else {
+        let mut effective_rig = cfg.rig.clone();
+        if !cfg.room_enabled {
+            bypassed_stages.push("space_room".into());
+            effective_rig.room_preset = RoomPreset::Direct;
+        }
+        if !cfg.mic_enabled {
+            bypassed_stages.push("microphone".into());
+            for slot in &mut effective_rig.mics {
+                slot.pattern_override = Some(Pattern::Omni);
+            }
+        }
+        let eff_preamp = if cfg.mic_enabled {
+            cfg.preamp_drive
+        } else {
+            0.0
+        };
+
+        let active_indices: Vec<usize> = effective_rig
+            .mics
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.enabled)
+            .map(|(i, _)| i)
+            .collect();
+        let indices = if active_indices.is_empty() {
+            vec![effective_rig
+                .selected_mic
+                .min(effective_rig.mics.len().saturating_sub(1))]
+        } else {
+            active_indices
+        };
+
+        if indices.len() == 1 {
+            let mut slot_rig = effective_rig.clone();
+            slot_rig.selected_mic = indices[0];
+            capture::render_studio_rig_stereo_with_options(
+                dry_samples,
+                rate,
+                &slot_rig,
+                sources,
+                mics,
+                surfaces,
+                cfg.mic_enabled,
+                eff_preamp,
+                preserve_tail,
+            )
+        } else {
+            // Multi-mic stereo array: preserve physical inter-mic arrival delay relative to
+            // closest mic and apply constant-power stereo panning from each mic's lateral X offset.
+            let c = crate::studio_catalog::speed_of_sound_celsius(f64::from(
+                effective_rig.temperature_c,
+            ));
+            let fs = f64::from(rate.max(1));
+            let mut per_mic = Vec::with_capacity(indices.len());
+            let mut min_dist = f64::INFINITY;
+            for &mi in &indices {
+                let off = effective_rig.mics[mi].offset_m;
+                let dist = (f64::from(off[0]).powi(2)
+                    + f64::from(off[1]).powi(2)
+                    + f64::from(off[2]).powi(2))
+                .sqrt()
+                .max(0.20);
+                min_dist = min_dist.min(dist);
+                let mut slot_rig = effective_rig.clone();
+                slot_rig.selected_mic = mi;
+                let st = capture::render_studio_rig_stereo_with_options(
+                    dry_samples,
+                    rate,
+                    &slot_rig,
+                    sources,
+                    mics,
+                    surfaces,
+                    cfg.mic_enabled,
+                    eff_preamp,
+                    preserve_tail,
+                );
+                per_mic.push((mi, dist, f64::from(off[0]), st));
+            }
+            let max_len = per_mic
+                .iter()
+                .map(|(_, d, _, st)| {
+                    let itd = (((*d - min_dist).max(0.0) / c) * fs).round() as usize;
+                    st.left.len() + if preserve_tail { itd } else { 0 }
+                })
+                .max()
+                .unwrap_or(dry_samples.len());
+            let mut mix_l = vec![0.0_f32; max_len];
+            let mut mix_r = vec![0.0_f32; max_len];
+            let norm_scale = 1.0 / (per_mic.len() as f64).sqrt();
+            let max_abs_x = per_mic
+                .iter()
+                .map(|(_, _, x, _)| x.abs())
+                .fold(0.25_f64, f64::max);
+
+            for (_, dist, x_m, st) in per_mic {
+                let pan = (x_m / max_abs_x).clamp(-1.0, 1.0); // -1 = left, +1 = right
+                let angle = (pan + 1.0) * 0.25 * std::f64::consts::PI; // [0, pi/2]
+                let gl = (angle.cos() * norm_scale) as f32;
+                let gr = (angle.sin() * norm_scale) as f32;
+                let itd_samp = (((dist - min_dist).max(0.0) / c) * fs).round() as usize;
+                for i in 0..st.left.len() {
+                    let dst = i + itd_samp;
+                    if dst < max_len {
+                        mix_l[dst] += st.left[i] * gl;
+                        mix_r[dst] += st.right[i] * gr;
+                    }
+                }
+            }
+            capture::StereoAudio {
+                left: mix_l,
+                right: mix_r,
+            }
+        }
+    };
+
+    let plugin_active = cfg.plugin_slot.enabled && cfg.plugin_slot.plugin_id != PluginId::None;
+    if !plugin_active {
+        bypassed_stages.push("plugin_slot".into());
+    } else {
+        apply_plugin_slot(&mut stereo.left, rate, &cfg.plugin_slot);
+        apply_plugin_slot(&mut stereo.right, rate, &cfg.plugin_slot);
+    }
+
+    let loudness =
+        crate::acoustics_physics::measure_loudness_bs1770(&[&stereo.left, &stereo.right], rate);
+    let mut interleave = Vec::with_capacity(stereo.left.len() * 2);
+    for (&l, &r) in stereo.left.iter().zip(stereo.right.iter()) {
+        interleave.push(l);
+        interleave.push(r);
+    }
+    let output_sha256 = hash_f32_samples(&interleave);
+    let bit_identical_to_dry = stereo.left == dry_samples && stereo.right == dry_samples;
+
+    StereoPipelineOutput {
+        audio: stereo,
+        loudness,
         summary: PipelineStageSummary {
             dry_sha256,
             output_sha256,
@@ -303,7 +612,8 @@ fn apply_biquad_shelf(buf: &mut [f32], rate: f64, f0: f64, gain_db: f64, high_sh
     let (mut x1, mut x2, mut y1, mut y2) = (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
     for s in buf.iter_mut() {
         let x0 = f64::from(*s);
-        let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        let raw_y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        let y0 = if raw_y0.abs() < 1e-30 { 0.0 } else { raw_y0 };
         x2 = x1;
         x1 = x0;
         y2 = y1;
@@ -338,6 +648,9 @@ fn apply_plugin_slot(buf: &mut [f32], rate: u32, slot: &PluginSlotConfig) {
                 } else {
                     rel * env + (1.0 - rel) * x
                 };
+                if env < 1e-30 {
+                    env = 0.0;
+                }
                 let g = if env > thresh {
                     let over = env / thresh;
                     over.powf(1.0 / ratio - 1.0)
@@ -361,6 +674,9 @@ fn apply_plugin_slot(buf: &mut [f32], rate: u32, slot: &PluginSlotConfig) {
                 } else {
                     rel * env + (1.0 - rel) * x
                 };
+                if env < 1e-30 {
+                    env = 0.0;
+                }
                 let g = if env >= thresh {
                     1.0
                 } else {
@@ -371,7 +687,7 @@ fn apply_plugin_slot(buf: &mut [f32], rate: u32, slot: &PluginSlotConfig) {
             }
         }
         PluginId::PhaseLimiter => {
-            // Lookahead transparent true-peak limiter (inspired by phaselimiter-style clean limiting)
+            // Lookahead 4× oversampled true-peak limiter (catches ITU-R BS.1770-4 inter-sample peaks)
             let ceiling = 10.0_f64.powf(slot.ceiling_dbfs.clamp(-6.0, -0.1) / 20.0);
             let drive = 10.0_f64.powf((3.5 * amount) / 20.0);
             let lookahead = ((0.003 * fs).round() as usize).clamp(16, 256);
@@ -380,18 +696,38 @@ fn apply_plugin_slot(buf: &mut [f32], rate: u32, slot: &PluginSlotConfig) {
                 return;
             }
             let driven: Vec<f64> = buf.iter().map(|&s| f64::from(s) * drive).collect();
+            let phases = [
+                crate::acoustics_physics::sinc8_weights_phase(0.25),
+                crate::acoustics_physics::sinc8_weights_phase(0.50),
+                crate::acoustics_physics::sinc8_weights_phase(0.75),
+            ];
+            let mut tp_env = vec![0.0_f64; n];
+            for i in 0..n {
+                let mut pk = driven[i].abs();
+                if i >= 3 && i + 4 < n {
+                    for w in &phases {
+                        let mut y = 0.0_f64;
+                        for (t, &wt) in w.iter().enumerate() {
+                            y += driven[i + t - 3] * wt;
+                        }
+                        pk = pk.max(y.abs());
+                    }
+                }
+                tp_env[i] = pk;
+            }
+
             let mut gain_curve = vec![1.0_f64; n];
             for i in 0..n {
                 let end = (i + lookahead).min(n);
                 let mut local_peak = 0.0_f64;
-                for &v in &driven[i..end] {
-                    local_peak = local_peak.max(v.abs());
+                for &v in &tp_env[i..end] {
+                    local_peak = local_peak.max(v);
                 }
                 if local_peak > ceiling {
                     gain_curve[i] = ceiling / local_peak;
                 }
             }
-            // Smooth gain release so limiting stays click-free
+            // Smooth gain release so true-peak limiting stays transparent and click-free
             let rel = (-1.0 / (0.060 * fs)).exp();
             let mut g = 1.0_f64;
             for i in 0..n {
@@ -471,10 +807,15 @@ impl AudioPipelineEngine {
         surfaces: Arc<[SurfaceEntry]>,
     ) -> Result<Self> {
         if !crate::valid_rate(sample_rate) {
-            return Err(format!("Unsupported sample rate {sample_rate} Hz (expected 8000..=96000)").into());
+            return Err(format!(
+                "Unsupported sample rate {sample_rate} Hz (expected 8000..=96000)"
+            )
+            .into());
         }
         if sources.is_empty() || mics.is_empty() || surfaces.is_empty() {
-            return Err("AudioPipelineEngine requires non-empty source, mic, and surface catalogs".into());
+            return Err(
+                "AudioPipelineEngine requires non-empty source, mic, and surface catalogs".into(),
+            );
         }
         Ok(Self {
             sample_rate,
@@ -492,7 +833,10 @@ impl AudioPipelineEngine {
     /// Invalidates cached Stage 1 cues and dry buffer when the rate changes.
     pub fn prepare(&mut self, sample_rate: u32) -> Result<()> {
         if !crate::valid_rate(sample_rate) {
-            return Err(format!("Unsupported sample rate {sample_rate} Hz (expected 8000..=96000)").into());
+            return Err(format!(
+                "Unsupported sample rate {sample_rate} Hz (expected 8000..=96000)"
+            )
+            .into());
         }
         if self.sample_rate != sample_rate {
             self.sample_rate = sample_rate;
@@ -550,11 +894,19 @@ impl AudioPipelineEngine {
         if reference_mono.is_empty() {
             return Err("Reference buffer must not be empty".into());
         }
-        if let Some((idx, &bad)) = reference_mono.iter().enumerate().find(|(_, s)| !s.is_finite()) {
-            return Err(format!("Reference buffer contains non-finite sample ({bad}) at index {idx}").into());
+        if let Some((idx, &bad)) = reference_mono
+            .iter()
+            .enumerate()
+            .find(|(_, s)| !s.is_finite())
+        {
+            return Err(format!(
+                "Reference buffer contains non-finite sample ({bad}) at index {idx}"
+            )
+            .into());
         }
         let cues = reperform::analyze_guitar(reference_mono, self.sample_rate)?;
-        let dry = cues.synthesize_dry_for_source_with_voicing(self.active_source(), &self.voicing)?;
+        let dry =
+            cues.synthesize_dry_for_source_with_voicing(self.active_source(), &self.voicing)?;
         self.cues = Some(cues);
         self.dry_buffer = Some(dry);
         Ok(self.dry_buffer.as_deref().unwrap_or(&[]))
@@ -566,7 +918,8 @@ impl AudioPipelineEngine {
             .cues
             .as_ref()
             .ok_or("No extracted performance cues available; run Stage 1 first")?;
-        let dry = cues.synthesize_dry_for_source_with_voicing(self.active_source(), &self.voicing)?;
+        let dry =
+            cues.synthesize_dry_for_source_with_voicing(self.active_source(), &self.voicing)?;
         self.dry_buffer = Some(dry);
         Ok(self.dry_buffer.as_deref().unwrap_or(&[]))
     }
@@ -607,7 +960,10 @@ impl AudioPipelineEngine {
             .into());
         }
         if let Some((idx, &bad)) = dry_in.iter().enumerate().find(|(_, s)| !s.is_finite()) {
-            return Err(format!("Dry input buffer contains non-finite sample ({bad}) at index {idx}").into());
+            return Err(format!(
+                "Dry input buffer contains non-finite sample ({bad}) at index {idx}"
+            )
+            .into());
         }
         let mut cfg = self.post_dry.clone();
         cfg.rig.clamp_all();
@@ -751,12 +1107,21 @@ mod tests {
         plug_only.plugin_slot.ceiling_dbfs = -3.0;
         let out_plug = run_post_dry_pipeline(&dry, rate, &plug_only, &sources, &mics, &surfaces);
         assert!(out_plug.summary.plugin_slot_active);
-        let peak = out_plug.samples.iter().fold(0.0_f32, |m, &v| m.max(v.abs()));
+        let peak = out_plug
+            .samples
+            .iter()
+            .fold(0.0_f32, |m, &v| m.max(v.abs()));
         let ceiling_lin = 10.0_f32.powf(-3.0 / 20.0);
-        assert!(peak <= ceiling_lin + 1e-4, "limiter peak {peak} exceeded ceiling {ceiling_lin}");
+        assert!(
+            peak <= ceiling_lin + 1e-4,
+            "limiter peak {peak} exceeded ceiling {ceiling_lin}"
+        );
 
         // 5. Verify craft-atomic crash-safe WAV write produces readable WAV with no temp residue
-        let tmp = std::env::temp_dir().join(format!("spectracraft-atomic-test-{}.wav", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "spectracraft-atomic-test-{}.wav",
+            std::process::id()
+        ));
         write_wav_f32_atomic(&tmp, rate, &out_plug.samples).expect("atomic wav write");
         let reader = hound::WavReader::open(&tmp).expect("read back atomic wav");
         assert_eq!(reader.len() as usize, dry.len());
@@ -829,11 +1194,39 @@ mod tests {
 
     #[test]
     fn write_wav_f32_atomic_rejects_non_finite_samples() {
-        let tmp = std::env::temp_dir().join(format!("spectracraft-nan-test-{}.wav", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("spectracraft-nan-test-{}.wav", std::process::id()));
         let _ = std::fs::remove_file(&tmp);
         assert!(write_wav_f32_atomic(&tmp, 48_000, &[0.0, f32::NAN, 0.1]).is_err());
         assert!(write_wav_f32_atomic(&tmp, 48_000, &[0.0, f32::INFINITY, 0.1]).is_err());
-        assert!(!tmp.exists(), "failed non-finite WAV write must not leave a file behind");
+        assert!(
+            !tmp.exists(),
+            "failed non-finite WAV write must not leave a file behind"
+        );
+    }
+
+    #[test]
+    fn write_wav_atomic_with_hash_matches_written_file_without_reread() {
+        let samples = [0.0_f32, 0.25, -0.25, 0.5];
+        let tmp_f32 = std::env::temp_dir().join(format!(
+            "spectracraft-hash-f32-{}.wav",
+            std::process::id()
+        ));
+        let receipt_f32 = write_wav_f32_atomic_with_hash(&tmp_f32, 48_000, &samples).unwrap();
+        let disk_f32 = std::fs::read(&tmp_f32).unwrap();
+        assert_eq!(receipt_f32.bytes, disk_f32.len() as u64);
+        assert_eq!(receipt_f32.sha256, digest::sha256(&disk_f32));
+        let _ = std::fs::remove_file(&tmp_f32);
+
+        let tmp_i24 = std::env::temp_dir().join(format!(
+            "spectracraft-hash-i24-{}.wav",
+            std::process::id()
+        ));
+        let receipt_i24 = write_wav_i24_tpdf_atomic_with_hash(&tmp_i24, 48_000, &samples).unwrap();
+        let disk_i24 = std::fs::read(&tmp_i24).unwrap();
+        assert_eq!(receipt_i24.bytes, disk_i24.len() as u64);
+        assert_eq!(receipt_i24.sha256, digest::sha256(&disk_i24));
+        let _ = std::fs::remove_file(&tmp_i24);
     }
 
     #[test]
@@ -886,10 +1279,69 @@ mod tests {
     fn audio_pipeline_engine_rejects_mismatched_buffers_and_non_finite_input() {
         let mut engine = AudioPipelineEngine::new(48_000).expect("engine init");
         let mut short_out = vec![0.0_f32; 4];
-        assert!(engine.process_post_dry_buffer(&[0.0; 8], &mut short_out).is_err());
+        assert!(engine
+            .process_post_dry_buffer(&[0.0; 8], &mut short_out)
+            .is_err());
         assert!(engine
             .process_post_dry_buffer(&[0.0, f32::NAN, 0.1, 0.2], &mut short_out)
             .is_err());
         assert!(engine.prepare(200).is_err());
+    }
+
+    #[test]
+    fn stereo_full_tail_preamp_and_24bit_export_preserve_invariants() {
+        let sources = source_catalog();
+        let mics = mic_catalog();
+        let surfaces = surface_catalog();
+        let rate = 48_000_u32;
+        let dry: Vec<f32> = (0..4800)
+            .map(|i| {
+                let t = i as f64 / f64::from(rate);
+                let env = (-t * 10.0).exp();
+                (env * 0.45 * (TAU * 330.0 * t).sin()) as f32
+            })
+            .collect();
+
+        // Bypassed stereo matches dry bit-for-bit on both L & R
+        let mut cfg = PostDryPipelineConfig::default();
+        let bypass_st =
+            run_post_dry_pipeline_stereo(&dry, rate, &cfg, &sources, &mics, &surfaces, true);
+        assert!(bypass_st.summary.bit_identical_to_dry);
+        assert_eq!(bypass_st.audio.left, dry);
+        assert_eq!(bypass_st.audio.right, dry);
+
+        // Enabled live room + mic + preamp + full tail produces decorrelated stereo > dry.len()
+        cfg.mic_enabled = true;
+        cfg.room_enabled = true;
+        cfg.preamp_drive = 0.55;
+        cfg.rig.apply_preset(RoomPreset::Medium);
+        cfg.plugin_slot.enabled = true;
+        cfg.plugin_slot.plugin_id = PluginId::PhaseLimiter;
+        cfg.plugin_slot.ceiling_dbfs = -1.0;
+
+        let out_st =
+            run_post_dry_pipeline_stereo(&dry, rate, &cfg, &sources, &mics, &surfaces, true);
+        assert!(
+            out_st.audio.left.len() > dry.len(),
+            "preserve_tail must retain full room decay tail"
+        );
+        assert_eq!(out_st.audio.left.len(), out_st.audio.right.len());
+        assert_ne!(
+            out_st.audio.left, out_st.audio.right,
+            "stereo room FDN must decorrelate L vs R"
+        );
+        assert!(
+            out_st.loudness.true_peak_dbtp <= -0.8,
+            "4x true-peak limiter should hold ceiling"
+        );
+
+        // Crash-safe 24-bit TPDF stereo WAV export round-trip
+        let tmp =
+            std::env::temp_dir().join(format!("spectracraft-stereo24-{}.wav", std::process::id()));
+        write_wav_stereo_i24_tpdf_atomic(&tmp, rate, &out_st.audio).expect("24-bit stereo WAV");
+        let reader = hound::WavReader::open(&tmp).expect("read 24-bit stereo WAV");
+        assert_eq!(reader.spec().channels, 2);
+        assert_eq!(reader.spec().bits_per_sample, 24);
+        let _ = std::fs::remove_file(&tmp);
     }
 }

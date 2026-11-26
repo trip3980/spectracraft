@@ -1,2 +1,0 @@
-   Compiling spectral-canvas-mono v0.1.0 (/workspace/scratch/7e8e50e9d14f/spectral-canvas-recovery/audit-preview5)
-    Finished `release` profile [optimized] target(s) in 28.85s

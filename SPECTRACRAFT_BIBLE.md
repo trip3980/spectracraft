@@ -2,8 +2,7 @@
 
 > **Authority & Canonical Reference**:
 > This Project Bible is the permanent operational specification for **SpectraCraft** and works directly
-> alongside the complete 17-section canonical contract retained at [`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md)
-> (mirrored in [`spectracraft-mono/SPECTRACRAFT_SPEC.md`](./spectracraft-mono/SPECTRACRAFT_SPEC.md)).
+> alongside the complete 17-section canonical contract retained at [`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md).
 > Whenever any ambiguity arises, `SPECTRACRAFT_SPEC.md` is authoritative and binding for every change to
 > the Rust engine, CLI/QA tools, catalogs, native desktop shell, server bridge, and workstation UI.
 
@@ -40,6 +39,18 @@ Before writing any code, stop at the first rung that satisfies the request:
 - **No Forbidden Dependencies**: Python, Python wrappers, browser substitutes, and promotional dashboards MUST NOT become application, engine, or verification dependencies. (The React/Express preview layer in this workspace is strictly a thin transport/UI shell over the real compiled `spectracraft-qa` / `spectracraft-mono` Rust binaries.)
 - **Scope**: Reconstruct a single-source performance for subsequent audio work. Full-mix separation, universal transcription, historical gear identification, forensic recovery, and full DAW replacement are explicitly out of scope.
 - **Build Order**: Maintain a rock-solid runnable core workflow first (import → shape extraction → dry regeneration → original/dry comparison → basic region tools), with optional capture (Mic, Room) and plugin stages cleanly layered on top.
+
+### Rust-First Engine Rule (Standing Language & Ownership Contract)
+
+SpectraCraft has two parts: the React + Vite UI (`src/`) is TypeScript and is what the browser preview runs, while the audio engine, Stage 1 physics, persistent string state, rendering, blind reporting, and all DSP live in Rust (`spectracraft-mono/` and related Rust crates). Follow these rules on **every** change:
+
+- **Prefer Rust**: Edit Rust code in the `spectracraft-mono` crates (and any other Rust engine directories) unless the task is explicitly a UI-only change.
+- **Thin TypeScript surface only**: Treat the TypeScript layer as a thin viewer, control surface, and adapter only. Do not move engine logic, physics, or DSP into TypeScript.
+- **No preview-convenience drift**: Do not default to TypeScript solutions just because the browser preview can hot-reload them.
+- **Tie-breaker goes to Rust**: If a change could be done in either language, implement it in Rust and keep the TypeScript side as a thin caller.
+- **Preserve language balance**: Keep the codebase weighted toward Rust (current split is roughly Rust majority with TypeScript ~30%, JavaScript ~3%, and smaller amounts of other languages). Do not let TypeScript grow as a percentage of the codebase when the work belongs in the engine.
+- **Name Rust modules explicitly**: Every change summary must name the Rust files or modules modified so it is clear the work is in the engine, not the web UI.
+- **Engine-owned invariants**: Keep Stage 1 persistent-state physics, additive re-pick, continuous bend, and blind Before/After reporting strictly in Rust. Leave the TypeScript UI as the viewer and control surface only.
 
 ---
 
@@ -208,7 +219,7 @@ pub enum LocalFixKind {
 - **Mic & Aim**: Independent multi-mic slots; model swap preserves pose; `Top X/Y` drag keeps `Z`, `Front X/Z` drag keeps `Y`; aim commands never move mic; rotation release within 8° snaps to cardinal axis; SM7-style 2 ft reference setup stays inactive while Stage 3 is bypassed.
 - **Room Presets**: Small `10×10 ft`, Medium `20×20 ft`, Large `50×50 ft` (default height `10 ft`); Open = ground only (`50×50×50 ft` visual guide only). W/L linked by default, H independent.
 - **Playback, Export & Review**: Playback engine owns playhead (never seeks on rounded display redraw); logical time preserved across Original/Regenerated switches; level-matched monitoring copies never alter exported audio; ordinary dry/capture exports remain unmastered with headroom and preserved acoustic tails (no hidden normalization); generated audio remains `Candidate` until explicit human review bound to exact dry revision.
-- **Real-Time & Resource Safety**: Zero blocking I/O, contended locks, or avoidable allocations on audio thread; explicit `Result` propagation; minimal documented `unsafe`; atomic file writes (`vendor/craft-atomic` pinned to `storytold/craft-libs@b24eba64758f1b9135e7a3afab1af88260f9323b`, MIT OR Apache-2.0) protecting originals and outputs from partial writes/overwrite.
+- **Real-Time & Resource Safety**: Zero blocking I/O, contended locks, or avoidable allocations on audio thread; explicit `Result` propagation; minimal documented `unsafe`; atomic file writes (`craft-atomic` pinned via `storytold/craft-libs@05b99ee5dcd64f2c954a693ef361301214ddc3c7`, MIT OR Apache-2.0, behind thin adapter `report_export.rs`) protecting originals and outputs from partial writes/overwrite.
 
 ---
 
@@ -223,10 +234,44 @@ pub enum LocalFixKind {
 | 06, 07, 08 Stages 3–5 | `pipeline.rs`, `capture.rs`, `studio_catalog.rs`, `acoustic_math.rs` | Active; all post-dry stages OFF by default, independently bypassable, atomic WAV writes via `craft-atomic` |
 | 10 Offline Catalogs | `studio_catalog.rs`, `capture-reference/` | Active; 138 sources, 972 mics, 32 surfaces, manifest-driven reload without engine changes |
 | 12, 13, 14 Native + Shell UI | `src/bin/spectracraft-mono.rs`, `src/bin/spectracraft-qa.rs`, `src/` | Active; shared 3D scene, Plans/3D, Inspector, Dock, Transport, atomic export |
-| 15 Atomic I/O | `vendor/craft-atomic/` | Active; pinned `storytold/craft-libs@b24eba64758f1b9135e7a3afab1af88260f9323b` (MIT OR Apache-2.0) |
+| 15 Atomic I/O & Adapters | `report_export.rs`, `settings_store.rs`, `update_manager.rs`, `daw_bridge.rs` | Active; thin adapters over pinned `storytold/craft-libs@05b99ee5dcd64f2c954a693ef361301214ddc3c7` (`craft-atomic`, `craft-pdf`, `craft-settings`, MIT OR Apache-2.0) plus DAW interchange |
 
 ### Required Quality & Verification Discipline (Section 16 & 17)
 Every substantial engine or pipeline change MUST report **PASS / FAIL / NOT RUN** with exact commands and artifacts against:
 1. **Rust Quality Suite**: `cargo fmt --all --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo build --locked --release --all-targets --all-features`, plus `cargo audit` / `cargo outdated` / `cargo tree -d` / `cargo deny check` (marking unavailable tools `NOT RUN`).
 2. **Contract Proofs**: Source-free deterministic render & original SHA-256 invariance; known synthetic controls (weak fundamentals, octave jumps, slides, repeats, overlap, quiet attacks, silence, clicks/chirps); stage bypass & no-double-application checks; surgical bit-identical outside & frequency-scope checks; catalog manifest & late-index checks; display-isolation invariance checks.
 3. **Honest Handoff**: Never claim unverified platform runtime support or treat numerical scores/screenshots as proof of completed human listening review.
+
+---
+
+## 09. Standing Security & Robustness Checklist (Pre-Export & File-Handling Gate)
+
+Run this checklist whenever the user requests a security, robustness, or pre-export audit, or whenever new file-handling, IPC, server bridge, or export code is added. Also mirrored as a project-local agent skill at `.agents/skills/security-robustness-check/SKILL.md`.
+
+### Critical
+- No secrets or API keys in frontend TypeScript, CSS, or committed files.
+- No database or sensitive queries running in the browser. All real work stays in the Rust engine or `server.ts`.
+- File uploads (WAV) are validated for type and size before they reach the Rust binary.
+- No original PCM or bedroom noise can leak into Stage 1 or the DAW export stems.
+- Temporary files and session folders are cleaned up and not left world-readable.
+
+### High Priority
+- Server-side validation of all inputs that reach the Rust CLI or Express endpoints.
+- Path traversal protection on any file paths accepted from the UI or CLI.
+- Error messages from `server.ts` and the Rust binaries do not leak internal paths or stack details to the client.
+- CORS and any API endpoints are not left wide open.
+- Dependencies (`Cargo.toml` and `package.json`) do not contain known vulnerable or unpinned packages.
+- The DAW interchange layer does not write original audio or unsanitized user data into the exported session files.
+
+### Medium Priority
+- Environment variables and local config are not committed.
+- Logging does not record full audio paths or user data unnecessarily.
+- The Express session map and any long-lived caches have a reasonable bound or cleanup path.
+- Tauri and desktop IPC commands do not accept arbitrary file paths without checking.
+
+### Standing Execution Rules
+1. **Prefer Rust** for any engine, IPC, or interchange fixes (per Section 01 Rust-First Engine Rule).
+2. **Protect core invariants**: never alter Stage 1 persistent-state physics, additive re-pick, continuous bend, or blind Before/After reporting during security or hardening passes.
+3. **Trigger discipline**: run this checklist on security/robustness/pre-export audits and whenever new file-handling, upload, IPC, or export paths are added or modified.
+4. **Honest environment boundaries**: when running in a sandbox without a full local Rust toolchain, apply static review and TypeScript/server verification directly and mark native Rust checks (`cargo test`, `cargo clippy`, `cargo audit`, `cargo build --release`, `SOURCE-SHA256.json`) as pending on a local machine with Rust installed.
+

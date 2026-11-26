@@ -318,10 +318,14 @@ fn parse_studio_rig_config(
                     }
                 }
                 if let Some(aim) = mv.get("aim") {
-                    slot.aim.tilt_x_deg =
-                        aim.get("tilt_x_deg").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                    slot.aim.roll_y_deg =
-                        aim.get("roll_y_deg").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    slot.aim.tilt_x_deg = aim
+                        .get("tilt_x_deg")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as f32;
+                    slot.aim.roll_y_deg = aim
+                        .get("roll_y_deg")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as f32;
                     slot.aim.heading_z_deg = aim
                         .get("heading_z_deg")
                         .and_then(|v| v.as_f64())
@@ -425,24 +429,17 @@ fn studio_capture(input: &Path, config_path: &Path, out: &Path) -> Result<()> {
         }
     }
 
-    // Write captured WAV as 32-bit float (lossless, preserves headroom without clipping)
-    let out_file = std::fs::File::create(out)?;
-    let out_spec = hound::WavSpec {
-        channels: 1,
-        sample_rate: spec.sample_rate,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
-    };
-    let mut writer = hound::WavWriter::new(std::io::BufWriter::new(out_file), out_spec)?;
+    // Write captured WAV as 32-bit float atomically via craft-atomic (lossless, preserves headroom)
     let mut peak = 0.0_f64;
     let mut sq_sum = 0.0_f64;
-    for &s in &mixed {
-        let clamped = if s.is_finite() { s } else { 0.0 };
-        peak = peak.max(f64::from(clamped).abs());
-        sq_sum += f64::from(clamped) * f64::from(clamped);
-        writer.write_sample(clamped)?;
+    for s in &mut mixed {
+        if !s.is_finite() {
+            *s = 0.0;
+        }
+        peak = peak.max(f64::from(*s).abs());
+        sq_sum += f64::from(*s) * f64::from(*s);
     }
-    writer.finalize()?;
+    spectracraft_mono::pipeline::write_wav_f32_atomic(out, spec.sample_rate, &mixed)?;
 
     let sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out)?);
     let rms = (sq_sum / mixed.len().max(1) as f64).sqrt();
@@ -525,9 +522,11 @@ fn render_dry_source(
         None => spectracraft_mono::reperform::VoicingControls::default(),
     };
     let samples = performance.synthesize_dry_for_source_with_voicing(source, &voicing)?;
-    let summary = spectracraft_mono::reperform::measure_spectral_summary(&samples, performance.rate());
-    spectracraft_mono::pipeline::write_wav_f32_atomic(out, performance.rate(), &samples)?;
-    let sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out)?);
+    let summary =
+        spectracraft_mono::reperform::measure_spectral_summary(&samples, performance.rate());
+    let sha256 =
+        spectracraft_mono::pipeline::write_wav_f32_atomic_with_hash(out, performance.rate(), &samples)?
+            .sha256;
     print_json(&serde_json::json!({
         "sha256": sha256,
         "source_index": idx,
@@ -582,13 +581,24 @@ fn dry_region_edit(
         &edit,
     )?;
 
-    spectracraft_mono::pipeline::write_wav_f32_atomic(out_edited, spec.sample_rate, &res.edited_dry)?;
-    spectracraft_mono::pipeline::write_wav_f32_atomic(out_before, spec.sample_rate, &res.before_slice)?;
-    spectracraft_mono::pipeline::write_wav_f32_atomic(out_after, spec.sample_rate, &res.after_slice)?;
-
-    let edited_sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out_edited)?);
-    let before_sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out_before)?);
-    let after_sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out_after)?);
+    let edited_sha256 = spectracraft_mono::pipeline::write_wav_f32_atomic_with_hash(
+        out_edited,
+        spec.sample_rate,
+        &res.edited_dry,
+    )?
+    .sha256;
+    let before_sha256 = spectracraft_mono::pipeline::write_wav_f32_atomic_with_hash(
+        out_before,
+        spec.sample_rate,
+        &res.before_slice,
+    )?
+    .sha256;
+    let after_sha256 = spectracraft_mono::pipeline::write_wav_f32_atomic_with_hash(
+        out_after,
+        spec.sample_rate,
+        &res.after_slice,
+    )?
+    .sha256;
     let spectral =
         spectracraft_mono::reperform::measure_spectral_summary(&res.edited_dry, spec.sample_rate);
 
@@ -635,11 +645,16 @@ fn pipeline_render(cached_dry_path: &Path, cfg_path: &Path, out: &Path) -> Resul
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
+    let preamp_drive = cfg
+        .get("preamp_drive")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let pipe_cfg = spectracraft_mono::pipeline::PostDryPipelineConfig {
         mic_enabled,
         room_enabled,
         rig: rig.clone(),
         plugin_slot,
+        preamp_drive,
     };
 
     let out_res = spectracraft_mono::pipeline::run_post_dry_pipeline(
@@ -650,8 +665,12 @@ fn pipeline_render(cached_dry_path: &Path, cfg_path: &Path, out: &Path) -> Resul
         &mics,
         &surfaces,
     );
-    spectracraft_mono::pipeline::write_wav_f32_atomic(out, spec.sample_rate, &out_res.samples)?;
-    let wav_sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out)?);
+    let wav_sha256 = spectracraft_mono::pipeline::write_wav_f32_atomic_with_hash(
+        out,
+        spec.sample_rate,
+        &out_res.samples,
+    )?
+    .sha256;
     let spectral =
         spectracraft_mono::reperform::measure_spectral_summary(&out_res.samples, spec.sample_rate);
     let acoustic_analysis =
@@ -699,11 +718,16 @@ fn studio_prompt_render(cues_path: &Path, config_path: &Path, out: &Path) -> Res
     let source = &sources[rig.source_index.min(sources.len().saturating_sub(1))];
     let dry_samples = performance.synthesize_dry_for_source_with_voicing(source, &voicing)?;
 
+    let preamp_drive = cfg
+        .get("preamp_drive")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let pipe_cfg = spectracraft_mono::pipeline::PostDryPipelineConfig {
         mic_enabled,
         room_enabled,
         rig: rig.clone(),
         plugin_slot,
+        preamp_drive,
     };
     let pipe_out = spectracraft_mono::pipeline::run_post_dry_pipeline(
         &dry_samples,
@@ -714,13 +738,18 @@ fn studio_prompt_render(cues_path: &Path, config_path: &Path, out: &Path) -> Res
         &surfaces,
     );
 
-    spectracraft_mono::pipeline::write_wav_f32_atomic(out, performance.rate(), &pipe_out.samples)?;
-
-    let captured_sha256 = spectracraft_mono::digest::sha256(&std::fs::read(out)?);
+    let captured_sha256 = spectracraft_mono::pipeline::write_wav_f32_atomic_with_hash(
+        out,
+        performance.rate(),
+        &pipe_out.samples,
+    )?
+    .sha256;
     let acoustic_analysis =
         spectracraft_mono::acoustic_math::analyze_studio_rig(&rig, &sources, &mics, &surfaces);
-    let spectral =
-        spectracraft_mono::reperform::measure_spectral_summary(&pipe_out.samples, performance.rate());
+    let spectral = spectracraft_mono::reperform::measure_spectral_summary(
+        &pipe_out.samples,
+        performance.rate(),
+    );
 
     print_json(&serde_json::json!({
         "shape_sha256": shape_sha256,
@@ -759,21 +788,7 @@ fn reference_shape(input_wav: &Path, cues_path: &Path, source_idx: Option<usize>
 
 fn fixture(out: &Path) -> Result<()> {
     let (samples, mut meta) = qa::six_note();
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(out)?;
-    let spec = hound::WavSpec {
-        channels: 1,
-        sample_rate: 48000,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut writer = hound::WavWriter::new(std::io::BufWriter::new(file), spec)?;
-    for sample in samples {
-        writer.write_sample(sample)?;
-    }
-    writer.finalize()?;
+    qa::write_wav_new_i16(48000, &samples, out)?;
     meta["sha256"] = spectracraft_mono::digest::sha256(&std::fs::read(out)?).into();
     print_json(&meta)
 }
@@ -874,6 +889,123 @@ fn preflight(root: &Path) -> Result<()> {
         return Err("Preflight failed".into());
     }
     Ok(())
+}
+
+fn technical_report_cmd(
+    before_wav: &Path,
+    after_wav: &Path,
+    out_json: &Path,
+    title: &str,
+    pipeline_label: &str,
+) -> Result<()> {
+    let (sb, before_raw) = qa::read_audio(before_wav)?;
+    let (sa, after_raw) = qa::read_audio(after_wav)?;
+    let fold_mono = |spec: hound::WavSpec, buf: Vec<f32>| -> Vec<f32> {
+        let ch = usize::from(spec.channels.max(1));
+        if ch == 1 {
+            buf
+        } else {
+            buf.chunks_exact(ch)
+                .map(|frame| frame.iter().copied().sum::<f32>() / ch as f32)
+                .collect()
+        }
+    };
+    if sb.sample_rate != sa.sample_rate {
+        return Err(format!(
+            "Sample rate mismatch: before {} Hz vs after {} Hz",
+            sb.sample_rate, sa.sample_rate
+        )
+        .into());
+    }
+    let before = fold_mono(sb, before_raw);
+    let after = fold_mono(sa, after_raw);
+    let report = spectracraft_mono::technical_report::build_technical_report(
+        &before,
+        &after,
+        sb.sample_rate,
+        title,
+        pipeline_label,
+    )?;
+    let json_bytes = serde_json::to_vec_pretty(&report)?;
+    spectracraft_mono::report_export::atomic_write_bytes(out_json, &json_bytes)?;
+    print_json(&report)
+}
+
+fn export_report_cmd(report_json: &Path, out_path: &Path, format: &str) -> Result<()> {
+    let report: spectracraft_mono::technical_report::TechnicalReport =
+        serde_json::from_reader(std::fs::File::open(report_json)?)?;
+    let receipt = spectracraft_mono::report_export::export_report(&report, out_path, format)?;
+    print_json(&receipt)
+}
+
+fn export_daw_cmd(
+    target_id: &str,
+    dry_wav: &Path,
+    final_wav: &Path,
+    out_dir: &Path,
+    cues_json: Option<&Path>,
+    title: &str,
+    bit_depth_raw: &str,
+) -> Result<()> {
+    let target =
+        spectracraft_mono::daw_bridge::EditorTarget::from_id(target_id).ok_or_else(|| {
+            format!(
+            "Unsupported DAW target '{target_id}' (expected audition, logic, daw, or soundcraft)"
+        )
+        })?;
+    let bit_depth = spectracraft_mono::daw_bridge::ExportBitDepth::from_id(bit_depth_raw)
+        .ok_or_else(|| format!("Unsupported bit depth '{bit_depth_raw}' (expected 24 or 32)"))?;
+
+    let (dry_spec, dry_samples) = qa::read_audio(dry_wav)?;
+    if dry_spec.channels != 1 {
+        return Err("Expected mono dry WAV for DAW interchange export".into());
+    }
+    let (final_spec, final_samples) = qa::read_audio(final_wav)?;
+    if final_spec.channels != 1 {
+        return Err("Expected mono final WAV for DAW interchange export".into());
+    }
+    if dry_spec.sample_rate != final_spec.sample_rate {
+        return Err(format!(
+            "Sample rate mismatch: dry {} Hz vs final {} Hz",
+            dry_spec.sample_rate, final_spec.sample_rate
+        )
+        .into());
+    }
+
+    let markers = if let Some(cues_path) = cues_json {
+        let perf: spectracraft_mono::reperform::Performance =
+            serde_json::from_reader(std::fs::File::open(cues_path)?)?;
+        spectracraft_mono::daw_bridge::markers_from_performance(&perf)
+    } else {
+        Vec::new()
+    };
+
+    let engine = spectracraft_mono::pipeline::AudioPipelineEngine::new(dry_spec.sample_rate)?;
+    let snapshot = engine.snapshot_state();
+    let stems = [
+        spectracraft_mono::daw_bridge::StemTrack {
+            name: "Dry Take (Stage 1)",
+            slug: "dry-take",
+            samples: &dry_samples,
+        },
+        spectracraft_mono::daw_bridge::StemTrack {
+            name: "Final Take (Stages 3-5)",
+            slug: "final-take",
+            samples: &final_samples,
+        },
+    ];
+    let req = spectracraft_mono::daw_bridge::InterchangeExportRequest {
+        session_title: title,
+        sample_rate: dry_spec.sample_rate,
+        bit_depth,
+        target,
+        stems: &stems,
+        markers: &markers,
+        engine_state: Some(&snapshot),
+        source_signature_note: None,
+    };
+    let receipt = spectracraft_mono::daw_bridge::export_for_editor(out_dir, &req)?;
+    print_json(&receipt)
 }
 
 fn run() -> Result<()> {
@@ -986,6 +1118,104 @@ fn run() -> Result<()> {
         ),
         ["pipeline-render", dry, cfg, out] => {
             pipeline_render(Path::new(dry), Path::new(cfg), Path::new(out))
+        }
+        ["technical-report", before_wav, after_wav, out_json] => technical_report_cmd(
+            Path::new(before_wav),
+            Path::new(after_wav),
+            Path::new(out_json),
+            "SpectraCraft Session",
+            "5-Stage Pipeline",
+        ),
+        ["technical-report", before_wav, after_wav, out_json, title, pipeline_label] => {
+            technical_report_cmd(
+                Path::new(before_wav),
+                Path::new(after_wav),
+                Path::new(out_json),
+                title,
+                pipeline_label,
+            )
+        }
+        ["export-report", report_json, out_path, format] => {
+            export_report_cmd(Path::new(report_json), Path::new(out_path), format)
+        }
+        ["export-daw", target, dry_wav, final_wav, out_dir] => export_daw_cmd(
+            target,
+            Path::new(dry_wav),
+            Path::new(final_wav),
+            Path::new(out_dir),
+            None,
+            "SpectraCraft Session",
+            "24",
+        ),
+        ["export-daw", target, dry_wav, final_wav, out_dir, cues_json, title, bit_depth] => {
+            let cues_opt = if *cues_json == "-" {
+                None
+            } else {
+                Some(Path::new(cues_json))
+            };
+            export_daw_cmd(
+                target,
+                Path::new(dry_wav),
+                Path::new(final_wav),
+                Path::new(out_dir),
+                cues_opt,
+                title,
+                bit_depth,
+            )
+        }
+        ["check-craft-libs"] => {
+            print_json(&spectracraft_mono::report_export::check_craft_libs_status(false))
+        }
+        ["check-craft-libs", "--online"] => {
+            print_json(&spectracraft_mono::report_export::check_craft_libs_status(true))
+        }
+        ["settings-get"] => {
+            print_json(&spectracraft_mono::settings_store::load_settings(None))
+        }
+        ["settings-set", json_path] => {
+            let next: spectracraft_mono::settings_store::SpectraCraftSettings =
+                serde_json::from_reader(std::fs::File::open(Path::new(json_path))?)?;
+            print_json(&spectracraft_mono::settings_store::save_settings(None, next)?)
+        }
+        ["settings-reset"] => {
+            print_json(&spectracraft_mono::settings_store::reset_settings(None)?)
+        }
+        ["update-check", root] => {
+            print_json(&spectracraft_mono::update_manager::run_update_check(
+                Path::new(root),
+                None,
+                false,
+            ))
+        }
+        ["update-check", root, "--online"] => {
+            print_json(&spectracraft_mono::update_manager::run_update_check(
+                Path::new(root),
+                None,
+                true,
+            ))
+        }
+        ["update-action", root, "not_now", notice_id] => {
+            let _ = root;
+            let nid = if *notice_id == "-" { "" } else { *notice_id };
+            print_json(&spectracraft_mono::update_manager::apply_not_now(
+                None, nid,
+            )?)
+        }
+        ["update-action", root, "download_later", target] => {
+            let tgt = if *target == "-" { None } else { Some(*target) };
+            print_json(&spectracraft_mono::update_manager::apply_download_later(
+                Path::new(root),
+                None,
+                tgt,
+            )?)
+        }
+        ["update-action", root, "update_now", target] => {
+            let tgt = if *target == "-" { None } else { Some(*target) };
+            print_json(&spectracraft_mono::update_manager::apply_update_now(
+                Path::new(root),
+                None,
+                tgt,
+            )?)
         }
         ["reference-shape", input, cues] => {
             reference_shape(Path::new(input), Path::new(cues), None)

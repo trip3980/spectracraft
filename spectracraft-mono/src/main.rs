@@ -1,5 +1,5 @@
 use spectracraft_mono::{analyze_with_texture, load_wav, render_wav, Model, Result};
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::path::Path;
 fn main() {
     if let Err(e) = run() {
         eprintln!("{e}");
@@ -47,18 +47,12 @@ fn run() -> Result<()> {
         }
         [action,input,output] if action=="analyze" || action=="analyze-texture" => {
             let (rate,wave)=load_wav(Path::new(input))?; let model=analyze_with_texture(&wave,rate,action=="analyze-texture")?;
-            let f=OpenOptions::new().write(true).create_new(true).open(output)?;
-            let mut writer = std::io::BufWriter::new(f);
-            serde_json::to_writer(&mut writer,&model)?;
-            writer.flush()?;
+            spectracraft_mono::qa::write_new(Path::new(output),&serde_json::to_vec(&model)?)?;
         }
         [action,input,output] if action=="measure-attacks" => {
             let (rate,wave)=load_wav(Path::new(input))?;
             let evidence=spectracraft_mono::attack_guard::measure_quiet_attacks(&wave,rate)?;
-            let f=OpenOptions::new().write(true).create_new(true).open(output)?;
-            let mut writer=std::io::BufWriter::new(f);
-            serde_json::to_writer(&mut writer,&evidence)?;
-            writer.flush()?;
+            spectracraft_mono::qa::write_new(Path::new(output),&serde_json::to_vec(&evidence)?)?;
         }
         [action,input,output] if action=="analyze-guitar-legacy" => {
             let (spec,wave)=spectracraft_mono::qa::read_audio(Path::new(input))?;
@@ -72,10 +66,7 @@ fn run() -> Result<()> {
             if action=="rebuild-dry-guitar" {
                 performance.write_dry_wav(Path::new(output))?;
             } else {
-                let f=OpenOptions::new().write(true).create_new(true).open(output)?;
-                let mut writer=std::io::BufWriter::new(f);
-                serde_json::to_writer(&mut writer,&performance)?;
-                writer.flush()?;
+                spectracraft_mono::qa::write_new(Path::new(output),&serde_json::to_vec(&performance)?)?;
             }
         }
         [action,input,output] if action=="render-dry-guitar" => {

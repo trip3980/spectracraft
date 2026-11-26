@@ -27,12 +27,19 @@ Thumbs.db
 *.spectracraft.json
 ui-screens/
 evidence/
+spectracraft-sessions/
+tmp/
+.tmp/
+*.tmp
 
-# Logs, environment files & secrets
+# Logs, environment files, local ArtCraft user settings & secrets
 *.log
 .env
 .env.*
 !.env.example
+config.toml
+config.toml.bak
+.spectracraft-config/
 
 # Local web/preview harness artifacts (keep out of Rust repository commits)
 node_modules/
@@ -40,3 +47,12 @@ dist/
 build/
 coverage/
 bun.lock
+
+# Tauri 2 build outputs & generated mobile Xcode/Gradle scaffolds
+src-tauri/target/
+src-tauri/gen/
+
+# Local verification & AI Studio-only scratch directories
+.aistudio/
+.playwright-cli/
+public/assets/aistudio/

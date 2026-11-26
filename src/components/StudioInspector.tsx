@@ -1,8 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
   Link2,
   Plus,
   RotateCcw,
@@ -34,7 +31,6 @@ import {
   setMicWorldPosM,
   setSourcePosM,
   snapAnglesToCardinalWithinThreshold,
-  speedOfSoundMps,
   unitDecimals,
   type CharacterTarget,
   type GridDirectionKey,
@@ -45,7 +41,6 @@ import {
   type PolarPattern,
   type RoomPresetKey,
   type RustAcousticAnalysis,
-  type RustCaptureResult,
   type RustSourceRegenResult,
   type RustStudioCatalogs,
   type SignalPathStyle,
@@ -72,9 +67,6 @@ interface StudioInspectorProps {
   onUpdateRig: (next: StudioRigState, commit?: boolean) => void;
   livePreview: boolean;
   onToggleLivePreview: (v: boolean) => void;
-  onRerenderCapture: () => void;
-  captureBusy: boolean;
-  captureResult: RustCaptureResult | null;
   acousticAnalysis?: RustAcousticAnalysis | null;
   analysisFromRust?: boolean;
   hasAudio: boolean;
@@ -89,18 +81,15 @@ interface StudioInspectorProps {
   // Stages 3, 4, 5 Independently Bypassable Post-Dry Pipeline (all OFF by default)
   pipelineStages?: PipelineStagesState;
   onChangePipelineStages?: (next: PipelineStagesState) => void;
-  onRenderPipeline?: () => void;
+  onRenderPipeline: () => void;
   pipelineBusy?: boolean;
   pipelineResult?: PipelineRenderResponse | null;
-  dryReviewApproved: boolean;
   dryPassedCount: number;
   onOpenDryReview: () => void;
-  /** ArtCraft workspace chrome callbacks (purely visual — never affect rig or audio). */
-  isFloating?: boolean;
-  canMoveLeft?: boolean;
-  canMoveRight?: boolean;
-  onMovePane?: (dir: -1 | 1) => void;
-  onToggleFloat?: () => void;
+  onGenerateReport?: () => void;
+  onOpenReport?: () => void;
+  hasReport?: boolean;
+  reportBusy?: boolean;
 }
 
 const GRID_DIRS: GridDirectionKey[] = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
@@ -113,9 +102,6 @@ export function StudioInspector({
   onUpdateRig,
   livePreview,
   onToggleLivePreview,
-  onRerenderCapture,
-  captureBusy,
-  captureResult,
   acousticAnalysis = null,
   analysisFromRust = false,
   hasAudio,
@@ -131,14 +117,12 @@ export function StudioInspector({
   onRenderPipeline,
   pipelineBusy = false,
   pipelineResult = null,
-  dryReviewApproved,
   dryPassedCount,
   onOpenDryReview,
-  isFloating = false,
-  canMoveLeft = false,
-  canMoveRight = false,
-  onMovePane,
-  onToggleFloat,
+  onGenerateReport,
+  onOpenReport,
+  hasReport = false,
+  reportBusy = false,
 }: StudioInspectorProps) {
   const [sourceCat, setSourceCat] = useState<'All' | 'Instrument' | 'Human' | 'Unknown'>('Instrument');
   const [sourceFamily, setSourceFamily] = useState<string>('All');
@@ -302,41 +286,6 @@ export function StudioInspector({
           >
             Checks ({dryPassedCount}/5)
           </button>
-          {!isFloating && onMovePane && (
-            <>
-              <button
-                type="button"
-                disabled={!canMoveLeft}
-                onClick={() => onMovePane(-1)}
-                title="Move Inspector panel left (visual only)"
-                aria-label="Move Inspector left"
-                className="p-0.5 text-[#a6a6a6] hover:text-white disabled:opacity-25"
-              >
-                <ChevronLeft className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                disabled={!canMoveRight}
-                onClick={() => onMovePane(1)}
-                title="Move Inspector panel right (visual only)"
-                aria-label="Move Inspector right"
-                className="p-0.5 text-[#a6a6a6] hover:text-white disabled:opacity-25"
-              >
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </>
-          )}
-          {!isFloating && onToggleFloat && (
-            <button
-              type="button"
-              onClick={onToggleFloat}
-              title="Undock Inspector into floating window (visual only)"
-              aria-label="Undock Inspector"
-              className="p-0.5 text-[#a6a6a6] hover:text-white"
-            >
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -2348,58 +2297,33 @@ export function StudioInspector({
           )}
         </div>
 
-        {(pipelineResult || captureResult) && (
+        {pipelineResult && (
           <div className="bg-[#1b1f24] border border-[#333c47] px-2 py-1 font-mono tabular-nums space-y-0.5 text-[9px] text-[#b4c4d4]">
-            {pipelineResult ? (
-              <>
-                <div className="flex justify-between">
-                  <span>OUT SHA: {pipelineResult.wav_sha256.slice(0, 12)}</span>
-                  <span className={pipelineResult.summary.bit_identical_to_dry ? 'text-[#4cc6ac]' : 'text-[#8bc2ff]'}>
-                    {pipelineResult.summary.bit_identical_to_dry
-                      ? 'Bit-identical to Dry'
-                      : [
-                          pipelineResult.summary.mic_stage_active ? 'Mic' : null,
-                          pipelineResult.summary.room_stage_active ? 'Room' : null,
-                          pipelineResult.summary.plugin_slot_active
-                            ? pipelineResult.summary.active_plugin
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' + ')}
-                  </span>
-                </div>
-                <div className="flex justify-between text-[#8da0b3]">
-                  <span>Centroid: {Math.round(pipelineResult.spectral.spectral_centroid_hz)} Hz</span>
-                  <span>
-                    Peak:{' '}
-                    {pipelineResult.spectral.peak_dbfs !== null
-                      ? `${pipelineResult.spectral.peak_dbfs.toFixed(1)} dB`
-                      : '—'}
-                  </span>
-                </div>
-              </>
-            ) : captureResult ? (
-              <>
-                <div className="flex justify-between">
-                  <span>RUST SHA: {captureResult.sha256.slice(0, 12)}</span>
-                  <span>{captureResult.path_count} paths</span>
-                </div>
-                <div className="flex justify-between text-[#8da0b3]">
-                  <span>
-                    1st refl:{' '}
-                    {captureResult.first_reflection_ms !== null
-                      ? `${captureResult.first_reflection_ms.toFixed(2)} ms`
-                      : 'none'}
-                  </span>
-                  <span>
-                    Peak:{' '}
-                    {captureResult.peak_dbfs !== null
-                      ? `${captureResult.peak_dbfs.toFixed(1)} dB`
-                      : '—'}
-                  </span>
-                </div>
-              </>
-            ) : null}
+            <div className="flex justify-between">
+              <span>OUT SHA: {pipelineResult.wav_sha256.slice(0, 12)}</span>
+              <span className={pipelineResult.summary.bit_identical_to_dry ? 'text-[#4cc6ac]' : 'text-[#8bc2ff]'}>
+                {pipelineResult.summary.bit_identical_to_dry
+                  ? 'Bit-identical to Dry'
+                  : [
+                      pipelineResult.summary.mic_stage_active ? 'Mic' : null,
+                      pipelineResult.summary.room_stage_active ? 'Room' : null,
+                      pipelineResult.summary.plugin_slot_active
+                        ? pipelineResult.summary.active_plugin
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' + ')}
+              </span>
+            </div>
+            <div className="flex justify-between text-[#8da0b3]">
+              <span>Centroid: {Math.round(pipelineResult.spectral.spectral_centroid_hz)} Hz</span>
+              <span>
+                Peak:{' '}
+                {pipelineResult.spectral.peak_dbfs !== null
+                  ? `${pipelineResult.spectral.peak_dbfs.toFixed(1)} dB`
+                  : '—'}
+              </span>
+            </div>
           </div>
         )}
 
@@ -2419,13 +2343,37 @@ export function StudioInspector({
           </label>
           <button
             type="button"
-            disabled={!hasAudio || pipelineBusy || captureBusy}
-            onClick={onRenderPipeline ?? onRerenderCapture}
+            disabled={!hasAudio || pipelineBusy}
+            onClick={onRenderPipeline}
             className="px-2.5 py-1 text-[11px] font-medium bg-[#378ef0] text-white hover:bg-[#499af5] disabled:opacity-40 disabled:bg-[#3a3a3a] disabled:text-[#8f8f8f]"
           >
-            {pipelineBusy || captureBusy ? 'Rendering Rust…' : 'Render Active Pipeline'}
+            {pipelineBusy ? 'Rendering Rust…' : 'Render Active Pipeline'}
           </button>
         </div>
+
+        {onGenerateReport && (
+          <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-[#313131]">
+            <button
+              type="button"
+              disabled={!hasAudio || reportBusy || pipelineBusy}
+              onClick={onGenerateReport}
+              className="flex-1 px-2.5 py-1 text-[11px] font-medium bg-[#1f2c3d] hover:bg-[#273a52] border border-[#355378] text-[#cfe4ff] disabled:opacity-40 disabled:bg-[#2e2e2e] disabled:border-[#3e3e3e] disabled:text-[#808080]"
+              title="Run blind Before/After technical audit and open dark-mode viewer"
+            >
+              {reportBusy ? 'Generating Blind Report…' : 'Generate Report'}
+            </button>
+            {hasReport && onOpenReport && (
+              <button
+                type="button"
+                onClick={onOpenReport}
+                className="px-2 py-1 text-[11px] bg-[#2a2a2a] hover:bg-[#353535] border border-[#454545] text-[#d6e4f8]"
+                title="Open last generated blind technical report"
+              >
+                View
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -88,7 +88,6 @@ pub fn source_inventory(root: &Path) -> Result<serde_json::Value> {
     }
     for name in [
         "Cargo.toml",
-        "Cargo.lock",
         "README.md",
         "NATIVE-GUITAR.md",
         "REPRODUCE.md",
@@ -108,6 +107,15 @@ pub fn source_inventory(root: &Path) -> Result<serde_json::Value> {
                 .replace('\\', "/"),
             sha256(&std::fs::read(path)?),
         );
+    }
+    let crate_lock = root.join("Cargo.lock");
+    let workspace_lock = root.parent().map(|p| p.join("Cargo.lock"));
+    if crate_lock.is_file() {
+        hashes.insert("Cargo.lock".into(), sha256(&std::fs::read(crate_lock)?));
+    } else if let Some(lock) = workspace_lock.filter(|p| p.is_file()) {
+        hashes.insert("Cargo.lock".into(), sha256(&std::fs::read(lock)?));
+    } else {
+        return Err("Cargo.lock not found in crate or workspace root".into());
     }
     Ok(serde_json::to_value(hashes)?)
 }
