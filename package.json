@@ -11,14 +11,14 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:ts": "tsx --test src/lib/*.test.ts",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "tauri:build:macos-universal": "tauri build --target universal-apple-darwin",
-    "tauri:ios:init": "tauri ios init",
-    "tauri:ios:build": "tauri ios build",
-    "tauri:android:init": "tauri android init",
-    "tauri:android:build": "tauri android build"
+    "tauri": "cargo tauri",
+    "tauri:dev": "cargo tauri dev",
+    "tauri:build": "cargo tauri build",
+    "tauri:build:macos-universal": "cargo tauri build --target universal-apple-darwin",
+    "tauri:ios:init": "cargo tauri ios init",
+    "tauri:ios:build": "cargo tauri ios build",
+    "tauri:android:init": "cargo tauri android init",
+    "tauri:android:build": "cargo tauri android build"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

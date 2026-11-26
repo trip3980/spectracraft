@@ -48,9 +48,10 @@ build/
 coverage/
 bun.lock
 
-# Tauri 2 build outputs & generated mobile Xcode/Gradle scaffolds
+# Tauri 2 build outputs, local installer outputs & generated mobile Xcode/Gradle scaffolds
 src-tauri/target/
 src-tauri/gen/
+dist-installers/
 
 # Local verification & AI Studio-only scratch directories
 .aistudio/

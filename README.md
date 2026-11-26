@@ -101,7 +101,7 @@ npm run dev
 
 ### 2. Native Desktop Shell (`spectracraft-desktop` via `egui`/`eframe`)
 
-SpectraCraft preserves its native Rust `egui`/`eframe` binary alongside Tauri 2:
+SpectraCraft preserves its native Rust `egui`/`eframe` desktop application alongside Tauri 2:
 
 ```sh
 # Linux x64 / macOS arm64 & x64 / Windows x64
@@ -109,9 +109,13 @@ cargo build --locked --release --features desktop --bin spectracraft-desktop
 cargo run --locked --features desktop --bin spectracraft-desktop
 ```
 
-### 3. Tauri 2 Desktop Builds (React + Vite UI + `spectracraft-mono` core)
+> **Packaging note:** `cargo build --locked --release --features desktop --bin spectracraft-desktop` outputs a **single standalone executable binary** (`target/release/spectracraft-desktop` or `spectracraft-desktop.exe`), not a packaged OS installer (`.deb`, `.dmg`, `.msi`, or `.exe` setup). Creating a distributable installer for `spectracraft-desktop` requires a separate packaging step (for example `cargo-deb`, `cargo-packager`, `cargo-bundle`, or Inno Setup / WiX).
 
-Install frontend dependencies and the Tauri 2 CLI once:
+### 3. Tauri 2 Cross-Platform Installers (Linux, Windows, macOS)
+
+> **Standalone Tauri IPC note:** `src-tauri/` currently wires `platform_info`, `supported_daw_targets`, `get_settings`, `update_settings`, `reset_settings_defaults`, and `export_daw_interchange` directly to `spectracraft-mono`. Standalone Tauri builds (`frontendDist: "../dist"`) still need Stage 1–5 audio IPC commands (`analyze`, `render-dry-source`, `dry-region-edit`, `pipeline-render`, `technical-report`, and WAV load) wired before the GUI can run fully without the local Express `server.ts` bridge. Building the Tauri 2 installer shells below still works and validates icons, metadata, and native bundle layout.
+
+Install frontend dependencies and the Tauri 2 CLI once on a host with Rust 1.89+ and platform SDKs:
 
 ```sh
 npm install
@@ -124,26 +128,29 @@ Run in development mode:
 npm run tauri:dev
 ```
 
-Build release installers/bundles per host platform:
+Build release installer packages per host platform (outputs land under `src-tauri/target/<triple>/release/bundle/` and can be copied into `dist-installers/`):
 
 ```sh
-# Linux (x64 — .deb, .rpm, .AppImage)
+# Generic host installer build via npm script (invokes `cargo tauri build`)
+npm run tauri:build
+
+# Linux (x64 — .deb, .rpm, .AppImage; requires WebKitGTK 4.1 + GTK3 dev libs)
 cargo tauri build --target x86_64-unknown-linux-gnu
 
-# Windows (x64 — .msi, NSIS .exe)
+# Windows (x64 — .msi, NSIS .exe; requires MSVC Build Tools + WebView2)
 cargo tauri build --target x86_64-pc-windows-msvc
 
-# macOS (Apple Silicon arm64 — .app, .dmg)
+# macOS (Apple Silicon arm64 — .app, .dmg; requires macOS + Xcode CLT)
 rustup target add aarch64-apple-darwin
 cargo tauri build --target aarch64-apple-darwin
 
-# macOS (Intel x64 — .app, .dmg)
+# macOS (Intel x64 — .app, .dmg; requires macOS + Xcode CLT)
 rustup target add x86_64-apple-darwin
 cargo tauri build --target x86_64-apple-darwin
 
 # macOS (Universal arm64 + x64 — .app, .dmg)
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
-cargo tauri build --target universal-apple-darwin
+npm run tauri:build:macos-universal
 ```
 
 ### 4. Tauri 2 Mobile Builds (iOS & Android)
@@ -151,18 +158,29 @@ cargo tauri build --target universal-apple-darwin
 Tauri 2 mobile configuration is included in `src-tauri/tauri.conf.json` (`iOS` & `android` bundle settings) and `src-tauri/src/lib.rs` (`#[cfg_attr(mobile, tauri::mobile_entry_point)]`). Signing identities / keystores are intentionally not committed.
 
 ```sh
-# iOS (macOS + Xcode required)
+# iOS (macOS + Xcode 15+ + CocoaPods required)
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-cargo tauri ios init
+npm run tauri:ios:init
 cargo tauri ios dev          # Simulator / connected device
-cargo tauri ios build        # IPA / Xcode archive (configure Apple Team ID in Xcode or tauri.conf.json)
+npm run tauri:ios:build      # IPA / Xcode archive (configure Apple Team ID in Xcode or tauri.conf.json)
 
-# Android (Android SDK + NDK required)
+# Android (Android SDK API 26+ + Android NDK + Java 17 required)
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-cargo tauri android init
+npm run tauri:android:init
 cargo tauri android dev      # Emulator / connected device
-cargo tauri android build    # APK / AAB (configure release keystore before Play Store distribution)
+npm run tauri:android:build  # APK / AAB (configure release keystore before Play Store distribution)
 ```
+
+### 5. Installer Build Status (Cloud Container vs. Local Host)
+
+| Package / Target | Built in Cloud Container? | Output / Requirement |
+| --- | --- | --- |
+| **Linux x64 CLI/QA `.deb`** (`spectracraft-cli`) | **Built** (`dpkg-deb` present) | `dist-installers/spectracraft-cli_0.1.0_amd64.deb` (installs `/usr/bin/spectracraft-mono` & `/usr/bin/spectracraft-qa` from prebuilt Linux release binaries; CLI/QA only, not a GUI installer) |
+| **Tauri 2 Linux GUI** (`.deb`, `.AppImage`) | **Pending local host** | Missing `rustc`, `cargo`, `cargo-tauri`, `pkg-config`, `libwebkit2gtk-4.1-dev`, `gtk+-3.0`, `linuxdeploy`/`appimagetool` |
+| **Tauri 2 Windows GUI** (`.msi`, NSIS `.exe`) | **Pending local host** | Requires Windows host + Rust MSVC + Visual Studio C++ Build Tools + Tauri 2 CLI |
+| **Tauri 2 macOS GUI** (`.app`, `.dmg`) | **Pending local host** | Requires macOS host + Xcode Command Line Tools + Rust + Tauri 2 CLI |
+| **Tauri 2 Mobile** (`.ipa`, `.apk`/`.aab`) | **Pending local host** | Requires macOS + Xcode (iOS) or Android SDK/NDK + Java 17 (Android) + Rust targets + Tauri 2 CLI |
+| **Native `egui` Desktop** (`spectracraft-desktop`) | **Pending local host** | Requires Rust 1.89+ and OS graphics/audio dev libs; outputs a single executable binary |
 
 ---
 
