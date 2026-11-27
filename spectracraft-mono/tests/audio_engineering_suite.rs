@@ -4,7 +4,10 @@ use spectracraft_mono::{
     pipeline::{self, PluginId, PluginSlotConfig, PostDryPipelineConfig},
     research_diagnostics,
     string_state::{BodyResonanceConfig, BodyResonator},
-    studio_catalog::{mic_catalog, source_catalog, surface_catalog, StudioRig},
+    studio_catalog::{
+        mic_catalog, source_catalog, surface_catalog, StudioRig, DIRECT_REF_DISTANCE_M,
+        FEET_TO_METRES,
+    },
     translation_layer,
 };
 use std::f64::consts::TAU;
@@ -252,11 +255,27 @@ fn test_01_white_noise_full_band() {
         "Body broadband gain drifted from dry_mix: got {:+.2} dB, expected {expected_body_db:+.2} dB",
         body_rms - in_rms
     );
-    // Stage 4 foam reference room preserves broadband energy within 0.5 dB.
+    // Stage 4 foam reference room under canonical Timing::Physical (H15) obeys physical 1/r
+    // direct-path attenuation (20*log10(DIRECT_REF_DISTANCE_M / d)) at 2.0 ft within 0.5 dB
+    // across the active signal window (with sinc16 direct-path fractional delay eliminating HF droop).
+    let dist_m = 2.0 * f64::from(FEET_TO_METRES);
+    let expected_s4_phys_db = 20.0 * (DIRECT_REF_DISTANCE_M / dist_m).log10();
+    let s4_active_rms = rms_db(&out_s4.samples[..body_f32.len().min(out_s4.samples.len())]);
     assert!(
-        (s4_rms - body_rms).abs() <= 0.5,
-        "Room stage energy drift exceeded 0.5 dB: {:+.2} dB",
+        ((s4_active_rms - body_rms) - expected_s4_phys_db).abs() <= 0.5,
+        "Room stage physical 1/r energy drifted > 0.5 dB: got {:+.2} dB, expected {expected_s4_phys_db:+.2} dB (full-buffer {:+.2} dB)",
+        s4_active_rms - body_rms,
         s4_rms - body_rms
+    );
+    // Fixed-block audition mode (Timing::AlignDirect) preserves broadband unity energy within 0.5 dB.
+    let out_s4_aligned = pipeline::run_post_dry_pipeline_fixed_block(
+        &body_f32, RATE, &s4_cfg, &sources, &mics, &surfaces,
+    );
+    let s4_aligned_rms = rms_db(&out_s4_aligned.samples);
+    assert!(
+        (s4_aligned_rms - body_rms).abs() <= 0.5,
+        "Aligned-direct room stage energy drift exceeded 0.5 dB: {:+.2} dB",
+        s4_aligned_rms - body_rms
     );
 }
 
@@ -586,6 +605,19 @@ fn test_03_sine_sweep_20hz_to_20khz() {
 
     check_parseval_slices(&out_full.samples, "test3_sweep_full");
     check_parseval_slices(&out_med.samples, "test3_sweep_medium");
+    // Under canonical Timing::Physical (H15), Stage 4 room outputs at 2.0 ft carry exact
+    // 1/r direct-path attenuation relative to DIRECT_REF_DISTANCE_M (0.40 m -> -3.66 dB at 2.0 ft).
+    let dist_atten_db = 20.0 * (DIRECT_REF_DISTANCE_M / (2.0 * f64::from(FEET_TO_METRES))).log10();
+    let out_room_aligned = pipeline::run_post_dry_pipeline_fixed_block(
+        &body_f32,
+        RATE,
+        &room_only_cfg,
+        &sources,
+        &mics,
+        &surfaces,
+    );
+    let (room_aligned_min, _, room_aligned_jump, _) = scan_sweep(&out_room_aligned.samples);
+
     assert!(
         body_min > -24.0 && body_jump < 2.5,
         "Body sweep discontinuity: min={body_min:.2}, step={body_jump:.2}"
@@ -595,12 +627,18 @@ fn test_03_sine_sweep_20hz_to_20khz() {
         "Mic sweep discontinuity: min={mic_min:.2}, step={mic_jump:.2}"
     );
     assert!(
-        room_min > -28.0 && room_jump < 3.5,
-        "Omni room sweep discontinuity: min={room_min:.2}, step={room_jump:.2}"
+        room_min > -28.0 + dist_atten_db && room_jump < 3.5,
+        "Omni room sweep discontinuity (Timing::Physical): min={room_min:.2} (floor {:.2}), step={room_jump:.2}",
+        -28.0 + dist_atten_db
     );
     assert!(
-        med_min > -31.0 && med_jump < 4.5,
-        "Medium room full-chain sweep dropout/jump: min={med_min:.2} dBFS @ {med_min_hz:.1} Hz, step={med_jump:.2} dB @ {med_jump_hz:.1} Hz"
+        room_aligned_min > -28.0 && room_aligned_jump < 3.5,
+        "Omni room sweep discontinuity (Timing::AlignDirect): min={room_aligned_min:.2}, step={room_aligned_jump:.2}"
+    );
+    assert!(
+        med_min > -31.0 + dist_atten_db && med_jump < 4.5,
+        "Medium room full-chain sweep dropout/jump: min={med_min:.2} dBFS @ {med_min_hz:.1} Hz (floor {:.2}), step={med_jump:.2} dB @ {med_jump_hz:.1} Hz",
+        -31.0 + dist_atten_db
     );
     // 10x10x10 cubic foam room has a physical ~-24 dB low-frequency SBIR comb null (pure physics = -23.9 dB @ 131 Hz,
     // shifted to 105.7 Hz by LR4 reflection phase); verify it stays finite with no digital dropout.

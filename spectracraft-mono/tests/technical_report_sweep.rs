@@ -82,7 +82,27 @@ fn mandatory_10s_sine_sweep_before_after_report_and_export() {
     let rendered =
         pipeline::run_post_dry_pipeline(&body_f32, RATE, &cfg, &sources, &mics, &surfaces);
     let final_export = &rendered.samples;
-    assert_eq!(final_export.len(), sweep.len());
+    // Canonical H14 post-dry pipeline preserves natural Stage 4 room decay tail beyond sweep.len().
+    assert!(
+        final_export.len() > sweep.len(),
+        "Canonical post-dry pipeline must preserve Stage 4 room decay tail: final={}, sweep={}",
+        final_export.len(),
+        sweep.len()
+    );
+    assert!(
+        final_export.len() <= sweep.len() + RATE as usize,
+        "Padded 10x10x10 foam room tail should stay bounded within 1 s: final={}, sweep={}",
+        final_export.len(),
+        sweep.len()
+    );
+    let fixed_block = pipeline::run_post_dry_pipeline_fixed_block(
+        &body_f32, RATE, &cfg, &sources, &mics, &surfaces,
+    );
+    assert_eq!(
+        fixed_block.samples.len(),
+        sweep.len(),
+        "Fixed-block audition pipeline must preserve exact input frame count"
+    );
 
     // 3. Generate Before & After reports plus real-buffer viewer data
     let report = build_technical_report(
@@ -134,10 +154,18 @@ fn mandatory_10s_sine_sweep_before_after_report_and_export() {
     assert!(report.before.parseval_verified);
     assert!(report.after.parseval_verified);
 
-    // 4b. Assert waveform and spectrogram views are non-empty, finite, and identically scaled
+    // 4b. Assert waveform and spectrogram views are non-empty, finite, and identically time-aligned
     let p = &report.plots;
     assert_eq!(p.sample_rate, RATE);
-    assert!((p.duration_s - 10.0).abs() < 0.01);
+    assert_eq!(report.before.samples, sweep.len());
+    assert_eq!(report.after.samples, final_export.len());
+    let expected_plot_dur_s = final_export.len() as f64 / f64::from(RATE);
+    assert!(
+        (p.duration_s - expected_plot_dur_s).abs() < 1e-4,
+        "Aligned viewer plot duration ({:.5} s) must match tail-preserving export ({:.5} s)",
+        p.duration_s,
+        expected_plot_dur_s
+    );
     assert!(p.waveform_scale_linear > 0.1 && p.waveform_scale_linear.is_finite());
     assert_eq!(p.waveform_before.len(), p.waveform_bins);
     assert_eq!(p.waveform_after.len(), p.waveform_bins);

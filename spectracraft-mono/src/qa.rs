@@ -2,7 +2,7 @@
 use crate::Result;
 use rustfft::{num_complex::Complex, FftPlanner};
 use serde::Serialize;
-use std::{io::Write, path::Path};
+use std::path::Path;
 #[derive(Serialize)]
 pub struct StereoMetrics {
     pub frames: usize,

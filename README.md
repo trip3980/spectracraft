@@ -6,13 +6,16 @@ Repository: <https://github.com/storytold/spectracraft>
 
 ## Authoritative Specification & Architecture Docs
 
-- **[`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md)** — Canonical Rust architecture, five-stage pipeline contract, acoustic mathematics, UI boundaries, and verification requirements.
-- **[`SPECTRACRAFT_BIBLE.md`](./SPECTRACRAFT_BIBLE.md)** — Standing engineering rules, Rust-first engine boundary, and Section 09 Security & Robustness Checklist.
+- **[`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md)** — Canonical Rust architecture, five-stage pipeline contract, acoustic mathematics, UI boundaries, Candidate review policy (Section 14), and verification requirements.
+- **[`SPECTRACRAFT_BIBLE.md`](./SPECTRACRAFT_BIBLE.md)** — Expanded governing document (Sections 00–20, 40 stable `SC-*` enforcement requirement IDs), Rust-first engine boundary, and Section 09 Security & Robustness Checklist.
+- **[`AUDIT_PROGRESS.md`](./AUDIT_PROGRESS.md)** — Implementation and verification evidence ledger tracking all 33 baseline audit findings (`H1–H15`, `M1–M18`) with independent implementation and verification dimensions.
+- **[`spectracraft-mono/source-qualification/PROTOCOL.md`](./spectracraft-mono/source-qualification/PROTOCOL.md)** — Recorded-source qualification protocol, versioned fixture manifest, frozen criteria, and generated 138-source coverage matrix.
 - **[`GEMINI.md`](./GEMINI.md)** & **[`.agents/skills/security-robustness-check/SKILL.md`](./.agents/skills/security-robustness-check/SKILL.md)** — Repository guide and standing pre-export security & robustness checklist.
 - **[`PLATFORM.md`](./PLATFORM.md)** — Cross-platform shell architecture (native `egui`/`eframe` desktop + Tauri 2 desktop/mobile targets for Linux, macOS, Windows, iOS, and Android).
 - **[`PLUGIN_ARCHITECTURE.md`](./PLUGIN_ARCHITECTURE.md)** — UI-free `AudioPipelineEngine`, `EngineStateSnapshot`, and thin DAW/editor interchange layer (`daw_bridge.rs`) for Adobe Audition, Logic Pro, standard DAWs, and ArtCraft SoundCraft.
-- **[`spectracraft-mono/DESIGN-CONTRACT.md`](./spectracraft-mono/DESIGN-CONTRACT.md)** — Core dry-listening gate and visual/audio separation contract.
+- **[`spectracraft-mono/DESIGN-CONTRACT.md`](./spectracraft-mono/DESIGN-CONTRACT.md)** — Historical dry-listening checklist & visual/audio separation notes; reconciled under [`SPECTRACRAFT_SPEC.md`](./SPECTRACRAFT_SPEC.md) §14 and `SC-GOV-04` so valid `Candidate` audition and stage export remain available without falsely claiming human listening approval.
 - **[`CRAFT_LIBS_MAINTENANCE.md`](./CRAFT_LIBS_MAINTENANCE.md)** — Pinned `storytold/craft-libs` Git dependency policy and thin adapter isolation (`report_export.rs`, `settings_store.rs`, `update_manager.rs`).
+- **[`docs/GPUI_INTEGRATION.md`](./docs/GPUI_INTEGRATION.md)** — Experimental native GPUI desktop frontend architecture, MSRV/pinning isolation, performance budgets, verification ledger, and rollback instructions.
 - **[`spectracraft-mono/THIRD-PARTY.md`](./spectracraft-mono/THIRD-PARTY.md)** — Third-party crate and reference attributions.
 
 ## Five-Stage Audio Pipeline
@@ -50,6 +53,7 @@ Any packaging, UI, or DAW-interchange work **must** preserve these core guarante
 │   ├── capabilities/default.json      # Tauri 2 ACL permissions
 │   ├── icons/                         # App icons (32x32, 128x128, 512x512)
 │   └── src/                           # Thin IPC bridge (lib.rs with mobile_entry_point + main.rs)
+├── apps/spectracraft-gpui/            # Experimental opt-in GPUI desktop frontend (isolated workspace & Cargo.lock)
 └── spectracraft-mono/                 # Native Rust DSP core, CLI, QA engine, and native egui desktop binary
     ├── src/
     │   ├── lib.rs                     # Core DSP library & module exports
@@ -74,11 +78,11 @@ Any packaging, UI, or DAW-interchange work **must** preserve these core guarante
 | Target | Required Toolchains & System SDKs |
 | --- | --- |
 | **Core Rust CLI / QA** | **Rust 1.89+** (`rustup`, `cargo`, `rustfmt`, `clippy`). Zero Python or FFmpeg runtime dependencies. |
-| **Web / React UI** | **Node.js 20+** and `npm`. |
+| **Web / React UI & Express Bridge** | **Node.js 22.6+** (native TypeScript execution for `npm start`) and `npm` with `package-lock.json` (`npm ci`). |
 | **Native `egui` Desktop** (`spectracraft-desktop`) | Rust 1.89+; on Linux: `pkg-config`, `libasound2-dev`, `libx11-dev`, `libxcb-*`, `libxkbcommon-dev`, `libgl1-mesa-dev`; on Windows: Visual Studio C++ Build Tools; on macOS: Xcode Command Line Tools. |
-| **Tauri 2 Desktop (Linux x64)** | Rust 1.89+, Node.js 20+, Tauri 2 CLI (`cargo install tauri-cli --version "^2"`), plus WebKitGTK & GTK3 dev libs (`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `patchelf`). |
-| **Tauri 2 Desktop (macOS arm64 / x64)** | Rust 1.89+ (`aarch64-apple-darwin` & `x86_64-apple-darwin`), Node.js 20+, Tauri 2 CLI, Xcode Command Line Tools. |
-| **Tauri 2 Desktop (Windows x64)** | Rust 1.89+ (`x86_64-pc-windows-msvc`), Node.js 20+, Tauri 2 CLI, Visual Studio C++ Build Tools, Microsoft Edge WebView2 runtime. |
+| **Tauri 2 Desktop (Linux x64)** | Rust 1.89+, Node.js 22.6+, Tauri 2 CLI (`cargo install tauri-cli --version "^2"`), plus WebKitGTK & GTK3 dev libs (`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `patchelf`). |
+| **Tauri 2 Desktop (macOS arm64 / x64)** | Rust 1.89+ (`aarch64-apple-darwin` & `x86_64-apple-darwin`), Node.js 22.6+, Tauri 2 CLI, Xcode Command Line Tools. |
+| **Tauri 2 Desktop (Windows x64)** | Rust 1.89+ (`x86_64-pc-windows-msvc`), Node.js 22.6+, Tauri 2 CLI, Visual Studio C++ Build Tools, Microsoft Edge WebView2 runtime. |
 | **Tauri 2 Mobile (iOS)** | macOS host, **Xcode 15+**, CocoaPods (`brew install cocoapods`), Rust targets `aarch64-apple-ios` & `aarch64-apple-ios-sim`, Apple Developer Team ID for device signing. |
 | **Tauri 2 Mobile (Android)** | **Android Studio**, Android SDK (API 26+), Android NDK (`NDK_HOME`), Java 17 (`JAVA_HOME`), Rust targets `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, keystore for release signing. |
 
@@ -111,9 +115,22 @@ cargo run --locked --features desktop --bin spectracraft-desktop
 
 > **Packaging note:** `cargo build --locked --release --features desktop --bin spectracraft-desktop` outputs a **single standalone executable binary** (`target/release/spectracraft-desktop` or `spectracraft-desktop.exe`), not a packaged OS installer (`.deb`, `.dmg`, `.msi`, or `.exe` setup). Creating a distributable installer for `spectracraft-desktop` requires a separate packaging step (for example `cargo-deb`, `cargo-packager`, `cargo-bundle`, or Inno Setup / WiX).
 
+### 2b. Experimental Native GPUI Shell (`apps/spectracraft-gpui`)
+
+An isolated, reversible experimental GPUI frontend lives in `apps/spectracraft-gpui/` (excluded from the root workspace so root `Cargo.lock` stays GPUI-free). It reuses shared `spectracraft-mono` session, worker, visualization, and playback modules without replacing `spectracraft-desktop`:
+
+```sh
+# Check, test, or run the experimental GPUI frontend (uses apps/spectracraft-gpui/rust-toolchain.toml)
+cargo check --locked --manifest-path apps/spectracraft-gpui/Cargo.toml
+cargo test --locked --manifest-path apps/spectracraft-gpui/Cargo.toml
+cargo run --locked --manifest-path apps/spectracraft-gpui/Cargo.toml -- [optional-input.wav]
+```
+
+See [`docs/GPUI_INTEGRATION.md`](./docs/GPUI_INTEGRATION.md) for MSRV reconciliation, pinned Zed revision details, performance budgets, verification status, and rollback instructions.
+
 ### 3. Tauri 2 Cross-Platform Installers (Linux, Windows, macOS)
 
-> **Standalone Tauri IPC note:** `src-tauri/` currently wires `platform_info`, `supported_daw_targets`, `get_settings`, `update_settings`, `reset_settings_defaults`, and `export_daw_interchange` directly to `spectracraft-mono`. Standalone Tauri builds (`frontendDist: "../dist"`) still need Stage 1–5 audio IPC commands (`analyze`, `render-dry-source`, `dry-region-edit`, `pipeline-render`, `technical-report`, and WAV load) wired before the GUI can run fully without the local Express `server.ts` bridge. Building the Tauri 2 installer shells below still works and validates icons, metadata, and native bundle layout.
+> **Native Tauri 2 IPC & Capability Boundary:** `src-tauri/src/lib.rs` wires the full Stage 1–5 workstation workflow directly to `spectracraft-mono` via `TauriTransport` (`src/lib/transport.ts`) with **zero Node/Express bridge required** in packaged desktop builds. A strict CSP (`src-tauri/tauri.conf.json`), least-privilege main-window capability (`src-tauri/capabilities/default.json`), and Rust-owned `ScopedHandleRegistry` (`tauri-media://<id>`) ensure the WebView can never read arbitrary host filesystem paths.
 
 Install frontend dependencies and the Tauri 2 CLI once on a host with Rust 1.89+ and platform SDKs:
 
@@ -221,13 +238,29 @@ cargo audit
 cargo test --locked --features desktop --bin spectracraft-desktop
 
 # Source integrity fingerprint verification (regenerate after Rust source edits)
+npm run verify:manifest
 target/release/spectracraft-qa verify-source spectracraft-mono spectracraft-mono/SOURCE-SHA256.json
 
 # Frontend TypeScript check, unit tests, and production bundle
+npm ci
 npm run lint
 npm run test:ts
 npm run build
 ```
+
+## Express Bridge Security & Capability Alignment
+
+When running the optional browser bridge (`server.ts`):
+- **Loopback by default**: binds to `127.0.0.1` unless `--host <addr>` or `SPECTRACRAFT_HOST` is explicitly supplied.
+- **Remote & maintenance protection**: non-loopback binds or `SPECTRACRAFT_REMOTE_MODE=1` require `SPECTRACRAFT_AUTH_TOKEN` (`Authorization: Bearer ...`); privileged maintenance endpoints support `SPECTRACRAFT_ADMIN_TOKEN`; `/api/updates/action` is disabled in `NODE_ENV=production` unless `SPECTRACRAFT_ENABLE_DEV_UPDATES=1`.
+- **Origin & proxy hardening**: mutating requests validate full `scheme://host:port` origins and ignore `X-Forwarded-Host` unless `SPECTRACRAFT_TRUST_PROXY=1`; configure explicit origins with `SPECTRACRAFT_ALLOWED_ORIGINS`.
+- **Concurrent server safety**: session storage acquires an exclusive `.server-owner.lock`; a second live instance isolates itself in a per-PID directory without deleting the first instance's artifacts.
+
+| Workflow | Channels | Sample Rates | Max Duration | Formats / Notes |
+| --- | --- | --- | --- | --- |
+| **Web Upload & Stage 1–5** | Mono only | 8–96 kHz | 90 s | PCM 8/16/24/32-bit, IEEE Float 32-bit, `WAVE_FORMAT_EXTENSIBLE` (zero implicit resampling) |
+| **Editable Layers Slicer** | Mono only | 8–96 kHz | 29.5 s window | Matches full upload WAV matrix; emits conversion provenance (`sourceEncoding`, `convertedToFloat32`) |
+| **Native `egui` Desktop** | Mono or stereo (explicitly folded to mono with status notice) | 8–96 kHz | 90 s | Background worker renders Stages 3–5 off the GUI thread; v2 session files bind dry approval to SHA-256 |
 
 ## CLI Quick Reference
 

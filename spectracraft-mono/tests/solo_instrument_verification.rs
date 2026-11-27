@@ -425,36 +425,103 @@ fn run_controlled_solo_verification(
     assert!(docx_receipt.fallback_used);
 }
 
-#[test]
-fn controlled_solo_instrument_archive_verification() {
-    let default_real_archive =
-        PathBuf::from("/tmp/spectracraft-solo-verify/segovia_1928_30s_48k.wav");
-    let env_archive = std::env::var_os("SPECTRACRAFT_ARCHIVE_WAV").map(PathBuf::from);
-    let chosen_path = env_archive.filter(|p| p.exists()).or_else(|| {
-        default_real_archive
-            .exists()
-            .then_some(default_real_archive)
-    });
+fn qualification_output_dir(subdir: &str) -> PathBuf {
+    let base = std::env::var_os("SPECTRACRAFT_QUAL_OUT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("target")
+                .join("qualification-evidence")
+                .join("solo-instrument")
+        });
+    base.join(subdir)
+}
 
-    let out_dir = std::env::temp_dir().join("spectracraft-solo-instrument-verify");
-    if let Some(wav_path) = chosen_path {
-        let (rate, samples) = read_mono_wav(&wav_path);
-        let label = format!(
-            "Archive Solo Guitar — Andrés Segovia, Bach Courante (1928, 78 rpm Victrola 1298-B / IA 78_courante_andrs-segovia-bach_gbia3032379b) [{}]",
-            wav_path.display()
-        );
-        run_controlled_solo_verification(&label, &samples, rate, &out_dir);
-    } else {
-        let rate = 48_000_u32;
-        let samples = synthesize_offline_vintage_solo_guitar_archive(rate);
-        run_controlled_solo_verification(
-            "Offline Vintage 78rpm Solo Plucked Guitar Archive Harness",
-            &samples,
-            rate,
-            &out_dir,
-        );
+fn load_verified_fixture_attribution(wav_path: &Path, wav_sha256: &str) -> String {
+    if let Some(manifest_path) = std::env::var_os("SPECTRACRAFT_ARCHIVE_MANIFEST").map(PathBuf::from)
+    {
+        if let Ok(text) = std::fs::read_to_string(&manifest_path) {
+            if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) {
+                let title = meta
+                    .get("title")
+                    .or_else(|| meta.get("asset_identifier"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Manifest Fixture");
+                let attribution = meta
+                    .get("attribution")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Attribution unspecified in manifest");
+                let license = meta
+                    .get("license")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("License unspecified");
+                if let Some(expected_sha) = meta.get("expected_wav_sha256").and_then(|v| v.as_str())
+                {
+                    assert!(
+                        expected_sha.eq_ignore_ascii_case(wav_sha256),
+                        "SPECTRACRAFT_ARCHIVE_WAV SHA-256 ({wav_sha256}) does not match manifest expected_wav_sha256 ({expected_sha})"
+                    );
+                }
+                return format!(
+                    "Real Recorded Fixture — {title} ({attribution}; {license}) [sha256={wav_sha256}]"
+                );
+            }
+        }
     }
-    let _ = std::fs::remove_dir_all(&out_dir);
+    format!(
+        "Real Recorded Local WAV (manifest attribution not supplied; never hardcoded) [file={}, sha256={wav_sha256}]",
+        wav_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown.wav")
+    )
+}
+
+/// Synthetic engineering control: distinct name, input, and retained report directory.
+/// Does NOT substitute for real recorded performance qualification.
+#[test]
+fn controlled_solo_instrument_synthetic_engineering_control() {
+    let rate = 48_000_u32;
+    let samples = synthesize_offline_vintage_solo_guitar_archive(rate);
+    let out_dir = qualification_output_dir("synthetic-engineering-control");
+    run_controlled_solo_verification(
+        "Synthetic Engineering Control — Offline Vintage 78rpm Plucked Guitar Harness (NOT a real recording)",
+        &samples,
+        rate,
+        &out_dir,
+    );
+    if std::env::var_os("SPECTRACRAFT_CLEAN_TEST_ARTIFACTS").is_some() {
+        let _ = std::fs::remove_dir_all(&out_dir);
+    }
+}
+
+/// Real-recording archive verification: explicitly requires `SPECTRACRAFT_ARCHIVE_WAV`.
+/// A missing asset MUST fail/block explicitly and NEVER silently select another file or synthetic fallback.
+/// Run with:
+///   SPECTRACRAFT_ARCHIVE_WAV=/path/to/mono.wav cargo test --locked --test solo_instrument_verification -- --ignored
+#[test]
+#[ignore = "Requires locally supplied SPECTRACRAFT_ARCHIVE_WAV (real recording; never substitutes synthetic fallback)"]
+fn controlled_solo_instrument_real_archive_verification() {
+    let wav_path = std::env::var_os("SPECTRACRAFT_ARCHIVE_WAV")
+        .map(PathBuf::from)
+        .expect(
+            "SPECTRACRAFT_ARCHIVE_WAV must be set to an existing local mono WAV; synthetic fallback is forbidden",
+        );
+    assert!(
+        wav_path.exists(),
+        "SPECTRACRAFT_ARCHIVE_WAV does not exist at '{}'; refusing to substitute another file",
+        wav_path.display()
+    );
+    let raw_bytes = std::fs::read(&wav_path).expect("read archive WAV bytes");
+    let wav_sha256 = spectracraft_mono::digest::sha256(&raw_bytes);
+    let (rate, samples) = read_mono_wav(&wav_path);
+    let label = load_verified_fixture_attribution(&wav_path, &wav_sha256);
+    let out_dir = qualification_output_dir("real-archive-verification");
+    run_controlled_solo_verification(&label, &samples, rate, &out_dir);
+    if std::env::var_os("SPECTRACRAFT_CLEAN_TEST_ARTIFACTS").is_some() {
+        let _ = std::fs::remove_dir_all(&out_dir);
+    }
 }
 
 #[test]
@@ -521,3 +588,95 @@ fn signature_verification_fails_on_foreign_or_mismatched_signatures() {
         check_hall.checks
     );
 }
+
+#[test]
+fn known_geometry_ir_and_independent_snr_estimator_fixtures() {
+    let rate = 48_000_u32;
+    let fs = f64::from(rate);
+    let sources = source_catalog();
+    let mics = mic_catalog();
+    let surfaces = surface_catalog();
+
+    // 1. Known-geometry impulse-response fixture: padded 10x10x10 ft foam room vs concrete room
+    let mut impulse = vec![0.0_f32; rate as usize];
+    impulse[0] = 1.0;
+
+    let padded_rig = StudioRig::sm7b_foam_reference();
+    let padded_ir = capture::render_studio_rig_with_tail(
+        &impulse, rate, &padded_rig, &sources, &mics, &surfaces, false,
+    );
+
+    let concrete_idx = surfaces
+        .iter()
+        .position(|s| s.id.contains("concrete") || s.id.contains("plaster"))
+        .unwrap_or(0);
+    let mut concrete_rig = padded_rig.clone();
+    concrete_rig.surface_faces = [concrete_idx; 6];
+    let concrete_ir = capture::render_studio_rig_with_tail(
+        &impulse, rate, &concrete_rig, &sources, &mics, &surfaces, false,
+    );
+
+    let tail_rms = |buf: &[f32]| -> f64 {
+        let start = (rate as usize) / 10; // after 100 ms
+        let slice = &buf[start.min(buf.len())..];
+        if slice.is_empty() {
+            return 0.0;
+        }
+        (slice.iter().map(|&v| f64::from(v) * f64::from(v)).sum::<f64>() / slice.len() as f64)
+            .sqrt()
+    };
+    assert!(
+        tail_rms(&concrete_ir) > tail_rms(&padded_ir) * 2.0,
+        "Concrete room IR late tail ({:.6}) must exceed padded foam room IR tail ({:.6})",
+        tail_rms(&concrete_ir),
+        tail_rms(&padded_ir)
+    );
+
+    // 2. Independent SNR estimator calibration: clean moving melody vs real -20 dB broadband noise
+    let dur_s = 3.0_f64;
+    let n = (dur_s * fs) as usize;
+    let freqs = [196.0, 220.0, 246.94, 293.66, 329.63, 392.0];
+    let mut clean = vec![0.0_f32; n];
+    for i in 0..n {
+        let t = i as f64 / fs;
+        let step = ((t / 0.5).floor() as usize).min(freqs.len() - 1);
+        let local_t = t - step as f64 * 0.5;
+        let env = (-local_t / 0.35).exp();
+        let f0 = freqs[step];
+        clean[i] = (0.35 * env * ((TAU * f0 * t).sin() + 0.4 * (TAU * 2.0 * f0 * t).sin())) as f32;
+    }
+    let clean_report = analyze_after_blind(&clean, rate).expect("clean melody blind report");
+    assert!(
+        clean_report.estimated_snr_db >= 28.0,
+        "Clean noiseless sustaining melody must clear 28 dB SNR gate, got {:.1} dB",
+        clean_report.estimated_snr_db
+    );
+    // Deterministic provenance checks remain EvidenceTag::Measured while room/distance remain Inferred.
+    assert!(clean_report
+        .findings
+        .iter()
+        .any(|f| f.tag == EvidenceTag::Measured));
+    assert!(clean_report
+        .findings
+        .iter()
+        .any(|f| f.tag == EvidenceTag::Inferred && f.category == "Room Type & Materials"));
+
+    // Add real broadband noise (~ -20 dB relative to active signal) -> MUST stay below 28 dB gate!
+    let mut noisy = clean.clone();
+    let mut rng = 0x1234_5678_9abc_def0_u64;
+    for s in &mut noisy {
+        rng = rng
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let u = (rng >> 32) as u32;
+        let white = (f64::from(u) / f64::from(u32::MAX)) * 2.0 - 1.0;
+        *s += (white * 0.035) as f32;
+    }
+    let noisy_report = analyze_after_blind(&noisy, rate).expect("noisy melody blind report");
+    assert!(
+        noisy_report.estimated_snr_db < 26.0,
+        "Broadband-noisy signal must NOT clear 28 dB SNR gate, got {:.1} dB",
+        noisy_report.estimated_snr_db
+    );
+}
+

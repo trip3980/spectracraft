@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "criteria_version": "1.0.0",
+  "frozen_date": "2026-11-26",
+  "baseline_commit": "9fbd775800b039f77cb6c9a901a458a0dadb715a",
+  "policy": "Versioned independently of production DSP. Thresholds are proposed project targets for clearly annotated applicable cases and must not be lowered to match failing outputs.",
+  "technical_gates": {
+    "require_original_sha256_unchanged": true,
+    "require_source_free_cue_roundtrip": true,
+    "require_deterministic_repeat_render": true,
+    "require_all_samples_finite": true,
+    "max_abs_sample_headroom": 1.0,
+    "require_exact_frame_count_preservation": true,
+    "min_non_silent_rms": 1e-4,
+    "require_stage2_to_5_identity_bypass": true
+  },
+  "musical_targets": {
+    "pitched_notes": {
+      "min_precision": 0.95,
+      "min_recall": 0.95,
+      "onset_tolerance_ms": 50.0,
+      "pitch_tolerance_cents": 50.0,
+      "offset_tolerance_min_ms": 50.0,
+      "offset_tolerance_duration_fraction": 0.20,
+      "allow_octave_folding": false
+    },
+    "continuous_voiced_pitch": {
+      "min_frame_accuracy_within_cents": 0.95,
+      "pitch_tolerance_cents": 50.0,
+      "max_raw_octave_error_rate": 0.01,
+      "count_unresolved_as_incorrect": true
+    },
+    "false_voicing": {
+      "max_false_voicing_unvoiced_rate": 0.01,
+      "max_false_voicing_silent_rate": 0.01
+    },
+    "unpitched_hits": {
+      "min_precision": 0.95,
+      "min_recall": 0.95,
+      "onset_tolerance_ms": 30.0,
+      "include_ghost_notes_in_denominator": true
+    },
+    "prohibited_scorer_transforms": [
+      "dynamic_time_warping",
+      "pitch_correction",
+      "octave_folding",
+      "per_note_gain_fitting",
+      "silent_normalization"
+    ]
+  },
+  "status_rules": {
+    "missing_local_recording": "BLOCKED",
+    "unimplemented_claimed_capability": "FAIL",
+    "inapplicable_metric_with_predeclared_reason": "N/A",
+    "unperformed_human_listening": "NOT RUN"
+  }
+}

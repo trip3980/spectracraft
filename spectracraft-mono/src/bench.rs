@@ -42,20 +42,49 @@ fn wav(bytes: Vec<u8>) -> Result<(u32, Vec<f32>)> {
             .collect(),
     ))
 }
-fn read_entry<R: Read + std::io::Seek>(
+/// Security & robustness limits for optional benchmark archive reading.
+///
+/// Advisory note (RUSTSEC-2026-0429): SpectraCraft NEVER calls `ZipArchive::extract`
+/// (the API affected by RUSTSEC-2026-0429). All benchmark reads use named-entry access
+/// (`archive.by_name`) with explicit entry-count and streaming decompressed-size caps.
+pub const MAX_ARCHIVE_ENTRIES: usize = 4096;
+pub const MAX_ENTRY_DECOMPRESSED_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_TOTAL_DECOMPRESSED_BYTES: u64 = 256 * 1024 * 1024;
+
+fn read_entry_bounded<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
     name: &str,
+    remaining_budget: &mut u64,
 ) -> Result<Vec<u8>> {
-    let mut file = archive.by_name(name)?;
-    if file.size() > 64 * 1024 * 1024 {
-        return Err("Benchmark entry exceeds 64 MiB".into());
+    if name.contains("..") || name.starts_with('/') || name.contains('\0') {
+        return Err("Unsafe benchmark archive entry path".into());
     }
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
+    let file = archive.by_name(name)?;
+    let cap = MAX_ENTRY_DECOMPRESSED_BYTES.min(*remaining_budget);
+    if file.size() > cap {
+        return Err("Benchmark entry exceeds decompressed size budget".into());
+    }
+    let mut bytes = Vec::with_capacity((file.size() as usize).min(1024 * 1024));
+    let mut limited = file.take(cap.saturating_add(1));
+    limited.read_to_end(&mut bytes)?;
+    if (bytes.len() as u64) > cap {
+        return Err("Benchmark entry exceeded bounded decompression limit".into());
+    }
+    *remaining_budget = remaining_budget.saturating_sub(bytes.len() as u64);
     Ok(bytes)
 }
+
 pub fn assets(root: &Path, pack: &str, scope: &str, needles: &[&str]) -> Result<Vec<Asset>> {
     let mut zip = zip::ZipArchive::new(std::fs::File::open(root.join(pack))?)?;
+    if zip.len() > MAX_ARCHIVE_ENTRIES {
+        return Err(format!(
+            "Benchmark archive exceeds maximum entry count ({} > {})",
+            zip.len(),
+            MAX_ARCHIVE_ENTRIES
+        )
+        .into());
+    }
+    let mut remaining_budget = MAX_TOTAL_DECOMPRESSED_BYTES;
     let names: Vec<_> = zip
         .file_names()
         .filter(|n| n.contains(scope) && !n.contains("__MACOSX"))
@@ -63,7 +92,7 @@ pub fn assets(root: &Path, pack: &str, scope: &str, needles: &[&str]) -> Result<
         .collect();
     let mut refs = BTreeSet::new();
     for preset in names.iter().filter(|n| n.ends_with(".dspreset")) {
-        let bytes = read_entry(&mut zip, preset)?;
+        let bytes = read_entry_bounded(&mut zip, preset, &mut remaining_budget)?;
         let text = std::str::from_utf8(&bytes)?
             .trim_start_matches('\u{feff}')
             .trim()
@@ -106,7 +135,7 @@ pub fn assets(root: &Path, pack: &str, scope: &str, needles: &[&str]) -> Result<
         let name = found
             .first()
             .ok_or_else(|| format!("No preset-mapped sample for {pack}/{scope}/{needle}"))?;
-        let (rate, samples) = wav(read_entry(&mut zip, name)?)?;
+        let (rate, samples) = wav(read_entry_bounded(&mut zip, name, &mut remaining_budget)?)?;
         out.push(Asset {
             name: (*name).clone(),
             rate,

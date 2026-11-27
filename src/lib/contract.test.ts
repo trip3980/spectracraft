@@ -6,14 +6,26 @@ import {
   countPassedDryCriteria,
   dbToSafeLinearGain,
   emptyDryListeningChecklist,
+  isCandidateStageExportPermitted,
   isDryListeningPassed,
+  resolveDryReviewLabel,
   summarizeEvidence,
 } from './contract.ts';
 
-test('Dry listening gate requires all 5 contract criteria before unlocking post-processing', () => {
+test('Human listening checklist requires all 5 criteria while valid Candidate export remains available (SC-GOV-04 / H5)', () => {
   const empty = emptyDryListeningChecklist();
   assert.equal(countPassedDryCriteria(empty), 0);
   assert.equal(isDryListeningPassed(empty), false);
+  assert.equal(isCandidateStageExportPermitted({ hasSession: true, hasDryAudio: true }), true);
+  assert.equal(isCandidateStageExportPermitted({ hasSession: true, hasDryAudio: false }), false);
+  assert.equal(
+    resolveDryReviewLabel({
+      hasDryAudio: true,
+      checklist: empty,
+      approvalMatchesActiveDryRevision: false,
+    }),
+    'candidate',
+  );
 
   const partial = {
     rhythm: true,
@@ -28,9 +40,26 @@ test('Dry listening gate requires all 5 contract criteria before unlocking post-
   const full = { ...partial, artifactFree: true };
   assert.equal(countPassedDryCriteria(full), 5);
   assert.equal(isDryListeningPassed(full), true);
+  // Stale revision binding cannot claim human approval even when checkboxes are checked
+  assert.equal(
+    resolveDryReviewLabel({
+      hasDryAudio: true,
+      checklist: full,
+      approvalMatchesActiveDryRevision: false,
+    }),
+    'candidate',
+  );
+  assert.equal(
+    resolveDryReviewLabel({
+      hasDryAudio: true,
+      checklist: full,
+      approvalMatchesActiveDryRevision: true,
+    }),
+    'approved',
+  );
 });
 
-test('Pipeline stage enforces strict ordering: empty -> analysis -> cues -> dry_gate -> post_unlocked', () => {
+test('Pipeline stage distinguishes dry_candidate from revision-bound dry_approved (SC-GOV-04 / SC-STATE-04)', () => {
   const empty = emptyDryListeningChecklist();
   const full = {
     rhythm: true,
@@ -54,11 +83,27 @@ test('Pipeline stage enforces strict ordering: empty -> analysis -> cues -> dry_
   );
   assert.equal(
     computePipelineStage({ hasSession: true, noteCount: 12, hasDryAudio: true, checklist: empty }),
-    'dry_gate',
+    'dry_candidate',
   );
   assert.equal(
-    computePipelineStage({ hasSession: true, noteCount: 12, hasDryAudio: true, checklist: full }),
-    'post_unlocked',
+    computePipelineStage({
+      hasSession: true,
+      noteCount: 12,
+      hasDryAudio: true,
+      checklist: full,
+      approvalMatchesActiveDryRevision: false,
+    }),
+    'dry_candidate',
+  );
+  assert.equal(
+    computePipelineStage({
+      hasSession: true,
+      noteCount: 12,
+      hasDryAudio: true,
+      checklist: full,
+      approvalMatchesActiveDryRevision: true,
+    }),
+    'dry_approved',
   );
 });
 

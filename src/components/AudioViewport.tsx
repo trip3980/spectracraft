@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { computeWaveformColumns, renderSpectrogramToCanvas } from '../lib/audioCanvas.ts';
+import {
+  computeWaveformColumns,
+  getEffectiveBufferSampleRate,
+  renderSpectrogramToCanvas,
+} from '../lib/audioCanvas.ts';
 import { classifyNoteEvidence } from '../lib/contract.ts';
 import {
   transformRegionByHandle,
@@ -41,7 +45,9 @@ interface AudioViewportProps {
   onSelectRange: (range: [number, number] | null) => void;
   onZoomViewport: (nextStartS: number, nextEndS: number) => void;
   onCursorMove: (cursor: CursorReadout | null) => void;
-  // Stage 2 Surgical Region Editing (Dry Take only)
+  // Stage 2 Surgical Region Editing (Dry Take only — Audit H7 & M5)
+  isDrySurfaceEditable?: boolean;
+  onSwitchToDrySurface?: () => void;
   dryRegions?: DryRegion[];
   selectedRegionId?: string | null;
   onSelectDryRegion?: (id: string | null) => void;
@@ -52,6 +58,8 @@ interface AudioViewportProps {
     minHz?: number | null;
     maxHz?: number | null;
   }) => void;
+  onBeginDryRegionGesture?: () => void;
+  onCancelDryRegionGesture?: () => void;
   onTransformDryRegion?: (id: string, next: DryRegion, commit: boolean) => void;
 }
 
@@ -79,10 +87,14 @@ export function AudioViewport({
   onSelectRange,
   onZoomViewport,
   onCursorMove,
+  isDrySurfaceEditable = true,
+  onSwitchToDrySurface,
   dryRegions = [],
   selectedRegionId = null,
   onSelectDryRegion,
   onCreateDryRegion,
+  onBeginDryRegionGesture,
+  onCancelDryRegionGesture,
   onTransformDryRegion,
 }: AudioViewportProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -156,7 +168,8 @@ export function AudioViewport({
     ctx.fillRect(0, 0, w, h);
 
     const pcm = originalBuffer.getChannelData(0);
-    const cols = computeWaveformColumns(pcm, sampleRate, 0, durationS, w);
+    const decodedRate = getEffectiveBufferSampleRate(originalBuffer, sampleRate);
+    const cols = computeWaveformColumns(pcm, decodedRate, 0, durationS, w);
     const midY = h / 2;
     ctx.fillStyle = '#5a708a';
     for (let x = 0; x < cols.length; x++) {
@@ -362,8 +375,14 @@ export function AudioViewport({
       return;
     }
 
-    // Stage 2 Surgical Region Creation strictly on the Dry Take pane
-    if (track === 'result' && (activeTool === 'marquee' || activeTool === 'range') && onCreateDryRegion) {
+    // Stage 2 Surgical Region Creation strictly on the Dry Take pane (Audit H7)
+    if (
+      track === 'result' &&
+      isDrySurfaceEditable &&
+      !viewedLayerLabel &&
+      (activeTool === 'marquee' || activeTool === 'range') &&
+      onCreateDryRegion
+    ) {
       const kind: DryRegionKind =
         activeTool === 'marquee' && displayMode !== 'waveform' ? 'marquee' : 'range';
       dragMode.current = {
@@ -460,9 +479,11 @@ export function AudioViewport({
     region: DryRegion,
     handle: RegionHandle,
   ) => {
+    if (!isDrySurfaceEditable || viewedLayerLabel) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     onSelectDryRegion?.(region.id);
+    onBeginDryRegionGesture?.();
     regionDragRef.current = {
       id: region.id,
       handle,
@@ -502,6 +523,14 @@ export function AudioViewport({
     e.stopPropagation();
     regionDragRef.current = null;
     onTransformDryRegion?.(drag.id, drag.lastNext, true);
+  };
+
+  const cancelRegionHandleDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = regionDragRef.current;
+    if (!drag) return;
+    e.stopPropagation();
+    regionDragRef.current = null;
+    onCancelDryRegionGesture?.();
   };
 
   const handlePlotWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -651,15 +680,31 @@ export function AudioViewport({
 
         {/* Bottom Track: Regenerated / Dry Take (with Stage 2 Surgical Region Overlays) */}
         <div ref={resTrackWrapRef} className="flex-1 min-h-0 relative flex flex-col overflow-hidden">
-          <div className="absolute top-1.5 left-[58px] z-10 pointer-events-none flex items-center gap-2 bg-[#1a1a1a]/85 border border-[#363636] px-1.5 py-0.5 text-[11px]">
-            <span className="w-2 h-2 bg-[#4cc6ac] inline-block" />
-            <span className="font-medium text-[#e0e0e0]">
+          <div className="absolute top-1.5 left-[58px] z-10 flex items-center gap-2 bg-[#1a1a1a]/90 border border-[#363636] px-1.5 py-0.5 text-[11px]">
+            <span className="w-2 h-2 bg-[#4cc6ac] inline-block pointer-events-none" />
+            <span className="font-medium text-[#e0e0e0] pointer-events-none">
               {viewedLayerLabel ? `Layer View: ${viewedLayerLabel}` : resultLabel}
             </span>
             {viewedLayerLabel ? (
-              <span className="font-mono text-[10px] text-[#e5a93c]">plot only (audio unchanged)</span>
+              <span className="font-mono text-[10px] text-[#e5a93c] pointer-events-none">
+                plot only (dry editing disabled)
+              </span>
+            ) : !isDrySurfaceEditable ? (
+              <span className="flex items-center gap-1.5 font-mono text-[10px] text-[#e5a93c]">
+                <span>Dry editing disabled on this view</span>
+                {onSwitchToDrySurface && (
+                  <button
+                    type="button"
+                    data-testid="switch-to-dry-to-edit-btn"
+                    onClick={onSwitchToDrySurface}
+                    className="px-1.5 py-0.2 bg-[#2a3f59] hover:bg-[#355070] border border-[#4b7bb5] text-[#e5f0ff] font-sans text-[10px]"
+                  >
+                    Switch to Dry to Edit
+                  </button>
+                )}
+              </span>
             ) : (activeTool === 'marquee' || activeTool === 'range') ? (
-              <span className="font-mono text-[10px] text-[#8bc2ff]">
+              <span className="font-mono text-[10px] text-[#8bc2ff] pointer-events-none">
                 Stage 2 Dry Edit: drag to mark {activeTool === 'marquee' ? 'time × freq marquee' : 'in/out range'}
               </span>
             ) : null}
@@ -674,8 +719,8 @@ export function AudioViewport({
             className={`w-full h-full block ${cursorClass}`}
           />
 
-          {/* Interactive Stage 2 Surgical Dry Regions Overlay */}
-          {!viewedLayerLabel && (
+          {/* Interactive Stage 2 Surgical Dry Regions Overlay (Dry Take ONLY — Audit H7) */}
+          {!viewedLayerLabel && isDrySurfaceEditable && (
             <div className="absolute inset-0 pointer-events-none z-20">
               {dryRegions.map((reg) => {
                 if (reg.endS < viewStartS || reg.startS > viewEndS) return null;
@@ -696,6 +741,7 @@ export function AudioViewport({
                     onPointerDown={(e) => startRegionHandleDrag(e, reg, 'move')}
                     onPointerMove={moveRegionHandleDrag}
                     onPointerUp={endRegionHandleDrag}
+                    onPointerCancel={cancelRegionHandleDrag}
                     className={`absolute pointer-events-auto cursor-move border transition-colors ${
                       isSelected
                         ? 'border-[#f0b44c] bg-[#f0b44c]/18 shadow-[0_0_0_1px_rgba(240,180,76,0.35)]'
@@ -868,6 +914,10 @@ function drawTrackCanvas(opts: {
   }
 
   const pcm = buffer.getChannelData(0);
+  // Always use decoded AudioBuffer.sampleRate for PCM indexing and FFT frequencies (Audit H8).
+  // Keep original file sampleRate strictly for Nyquist provenance ceiling.
+  const decodedSampleRate = getEffectiveBufferSampleRate(buffer, sampleRate);
+  const nyquistSampleRate = Math.min(decodedSampleRate, sampleRate > 0 ? sampleRate : decodedSampleRate);
 
   if (displayMode === 'spectrogram' || displayMode === 'both') {
     const specH = displayMode === 'both' ? Math.floor(h * 0.68) : h;
@@ -879,7 +929,7 @@ function drawTrackCanvas(opts: {
       renderSpectrogramToCanvas(
         octx,
         pcm,
-        sampleRate,
+        decodedSampleRate,
         viewStartS,
         viewEndS,
         displayMaxHz,
@@ -888,6 +938,7 @@ function drawTrackCanvas(opts: {
         1024,
         dbFloor,
         -12,
+        nyquistSampleRate,
       );
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(off, AXIS_W, 0, plotW, specH);
@@ -927,7 +978,7 @@ function drawTrackCanvas(opts: {
       }
     }
 
-    const nyq = computeNyquistDisplay(sampleRate, displayMaxHz);
+    const nyq = computeNyquistDisplay(nyquistSampleRate, displayMaxHz);
     if (nyq.hasAboveNyquist) {
       const nyqY = Math.round(nyq.nyquistFractionFromTop * specH);
       ctx.strokeStyle = '#e5a93c';
@@ -997,7 +1048,7 @@ function drawTrackCanvas(opts: {
     ctx.lineTo(w, midY + 0.5);
     ctx.stroke();
 
-    const cols = computeWaveformColumns(pcm, sampleRate, viewStartS, viewEndS, plotW);
+    const cols = computeWaveformColumns(pcm, decodedSampleRate, viewStartS, viewEndS, plotW);
     const amp = waveH * 0.44;
     ctx.fillStyle = waveColor;
     for (let i = 0; i < cols.length; i++) {

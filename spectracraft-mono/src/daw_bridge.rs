@@ -360,8 +360,7 @@ pub fn export_with_adapter(
         assets.push(write_asset(out_dir, rel, "engine_state", &bytes)?);
     }
 
-    let clean_session_title =
-        sanitize_display_text(req.session_title, "SpectraCraft Session", 160);
+    let clean_session_title = sanitize_display_text(req.session_title, "SpectraCraft Session", 160);
     let session_slug = sanitize_slug(&clean_session_title, "spectracraft-session");
     let ctx = InterchangeWriteContext {
         session_title: &clean_session_title,
@@ -442,7 +441,9 @@ fn sanitize_display_text(raw: &str, fallback: &str, max_chars: usize) -> String 
 }
 
 fn neutralize_spreadsheet_formula(s: String) -> String {
-    if s.starts_with(['=', '+', '-', '@']) {
+    if s.starts_with(['=', '+', '-', '@', '\t', '\r'])
+        || s.trim_start().starts_with(['=', '+', '-', '@'])
+    {
         format!("'{s}")
     } else {
         s
@@ -1011,7 +1012,11 @@ mod tests {
         assert_eq!(xml_escape("<a&b>\x00\x07"), "&lt;a&amp;b&gt;");
         assert_eq!(csv_escape("=CMD()"), "'=CMD()");
         assert_eq!(csv_escape("+SUM(A1,A2)"), "\"'+SUM(A1,A2)\"");
+        assert_eq!(csv_escape(" =CMD()"), "' =CMD()");
+        assert_eq!(csv_escape("\t=SUM(A1)"), "'\t=SUM(A1)");
         assert_eq!(tsv_sanitize("=1+1\tbad\x00"), "'=1+1 bad");
+        assert_eq!(tsv_sanitize("\t=CMD()"), "' =CMD()");
+        assert_eq!(tsv_sanitize("  +HYPERLINK(\"x\")"), "'  +HYPERLINK(\"x\")");
         assert_eq!(
             sanitize_display_text("My\r\nTake\x00", "Fallback", 64),
             "My  Take"

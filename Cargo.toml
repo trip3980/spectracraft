@@ -8,6 +8,7 @@ default-members = [
 ]
 exclude = [
     "src-tauri",
+    "apps/spectracraft-gpui",
 ]
 
 [workspace.package]

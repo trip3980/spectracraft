@@ -83,12 +83,19 @@ export interface DirectDepUpdateEntry {
   status: string;
 }
 
+export interface StagedTarget {
+  pin: string;
+  kind: 'tag' | 'rev' | string;
+  display_label: string;
+}
+
 export interface UpdateCheckReport {
   checked_at_unix: number;
   online: boolean;
   has_updates: boolean;
   has_staged_download: boolean;
   staged_target: string | null;
+  staged_target_detail?: StagedTarget | null;
   latest_notice_id: string;
   summary: string;
   craft_libs_repo: string;
@@ -109,7 +116,9 @@ export interface UpdateActionResult {
   sweep_test_passed: boolean;
   unit_tests_passed: boolean;
   rolled_back: boolean;
+  rollback_verified?: boolean;
   staged_target: string | null;
+  staged_target_detail?: StagedTarget | null;
   dismissed_notice_id: string | null;
 }
 
@@ -255,10 +264,34 @@ export function shouldShowUpdateNotice(
  * Pick an explicit tag or commit revision target for `craft-libs` when a newer
  * upstream release is detected; returns `null` when `craft-libs` is already current.
  */
+export function normalizeStagedTargetPin(raw: string | StagedTarget | null | undefined): string | null {
+  if (!raw) return null;
+  if (typeof raw === 'object') {
+    const p = raw.pin?.trim();
+    return p || null;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as { pin?: string };
+      if (typeof parsed.pin === 'string' && parsed.pin.trim()) {
+        return parsed.pin.trim();
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return trimmed.replace(/^craft-libs@/, '').trim() || null;
+}
+
 export function pickRecommendedUpdateTarget(report: UpdateCheckReport | null): string | null {
   if (!report) return null;
-  if (report.staged_target && report.staged_target.trim().length > 0) {
-    return report.staged_target.trim();
+  const stagedPin =
+    normalizeStagedTargetPin(report.staged_target_detail) ??
+    normalizeStagedTargetPin(report.staged_target);
+  if (stagedPin) {
+    return stagedPin;
   }
   const newerCraft = report.craft_libs.find((entry) => entry.update_available);
   if (!newerCraft) return null;

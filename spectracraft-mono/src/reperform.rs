@@ -670,10 +670,7 @@ impl Performance {
                     1.0
                 };
                 let air = if breath_amt > 0.0 || t <= 0.012 {
-                    noise_state = noise_state
-                        .wrapping_mul(6364136223846793005)
-                        .wrapping_add(1442695040888963407);
-                    let white = (((noise_state >> 33) as f64) / (u32::MAX as f64)) * 2.0 - 1.0;
+                    let white = next_centered_white_noise(&mut noise_state);
                     lp_noise = lp_noise * 0.65 + white * 0.35;
                     let onset_boost = 1.0 + 1.5 * (-t / 0.045).exp();
                     let breath = if breath_amt > 0.0 {
@@ -3833,4 +3830,41 @@ mod source_regen_tests {
         assert!(body_out.iter().all(|v| v.is_finite()));
         assert_ne!(body_out, y_bend);
     }
+
+    #[test]
+    fn procedural_noise_is_centered_deterministic_and_finite() {
+        let mut s1 = 0x51a7_9911_u64;
+        let mut s2 = 0x51a7_9911_u64;
+        let n = 100_000_usize;
+        let mut pos = 0usize;
+        let mut neg = 0usize;
+        let mut sum = 0.0_f64;
+        for _ in 0..n {
+            let a = next_centered_white_noise(&mut s1);
+            let b = next_centered_white_noise(&mut s2);
+            assert_eq!(a, b, "noise generator must be deterministic for same seed");
+            assert!(a.is_finite() && (-1.0..=1.0).contains(&a), "out of bounds: {a}");
+            if a > 0.0 {
+                pos += 1;
+            } else if a < 0.0 {
+                neg += 1;
+            }
+            sum += a;
+        }
+        let mean = sum / n as f64;
+        assert!(pos > 45_000 && neg > 45_000, "expected both polarities, pos={pos} neg={neg}");
+        assert!(mean.abs() < 0.015, "expected zero-centered mean, got {mean}");
+    }
 }
+
+/// Deterministic zero-centered white noise sample in `[-1.0, +1.0]` using the upper 32 bits
+/// of a 64-bit LCG (fixes 31-bit shift negative-only bias).
+#[inline]
+pub(crate) fn next_centered_white_noise(noise_state: &mut u64) -> f64 {
+    *noise_state = noise_state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    let u = (*noise_state >> 32) as u32;
+    (f64::from(u) / f64::from(u32::MAX)) * 2.0 - 1.0
+}
+

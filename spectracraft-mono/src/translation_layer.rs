@@ -182,6 +182,105 @@ fn apply_notch_inplace(buf: &mut [f64], rate: f64, center_hz: f64, q: f64) {
     }
 }
 
+/// High-resolution, low-sidelobe (4-term Blackman-Harris, -92 dB sidelobes) stationary
+/// noise-floor and 85th-percentile active-frame power estimator.
+///
+/// Using a 4096-point window at <=48 kHz (8192 at >48 kHz, gracefully reduced on short clips)
+/// resolves closely spaced musical notes without Hann sidelobe leakage contaminating adjacent
+/// bins during continuous legato sustain, while preserving unbiased Parseval-scaled calibration
+/// on broadband Gaussian noise (`min(q12 / -ln(0.88), q50 / ln(2))` per bin).
+fn estimate_stationary_noise_and_active_power(input: &[f32], rate: u32) -> (f64, f64) {
+    let n = input.len();
+    let target_win = if rate > 48_000 {
+        8192_usize
+    } else {
+        4096_usize
+    };
+    let mut win_len = target_win;
+    while win_len > 1024 && n < win_len * 4 {
+        win_len /= 2;
+    }
+    if n < win_len {
+        let p = input
+            .iter()
+            .map(|&s| {
+                let v = if s.is_finite() { f64::from(s) } else { 0.0 };
+                v * v
+            })
+            .sum::<f64>()
+            / (n.max(1) as f64);
+        let safe = p.max(1e-18);
+        return (safe, safe);
+    }
+    let hop = (win_len / 2).max(1);
+    let n_bins = win_len / 2 + 1;
+    let n_frames = (n - win_len) / hop + 1;
+
+    // 4-term Blackman-Harris window (-92 dB highest sidelobe)
+    let win: Vec<f64> = (0..win_len)
+        .map(|i| {
+            let phase = TAU * i as f64 / win_len as f64;
+            0.35875 - 0.48829 * phase.cos() + 0.14128 * (2.0 * phase).cos()
+                - 0.01168 * (3.0 * phase).cos()
+        })
+        .collect();
+    let win_pow_sum: f64 = win.iter().map(|w| w * w).sum::<f64>().max(1.0);
+
+    let mut planner = FftPlanner::<f64>::new();
+    let fft = planner.plan_fft_forward(win_len);
+    let mut fft_buf = vec![Complex::new(0.0_f64, 0.0_f64); win_len];
+
+    let mut frame_powers: Vec<Vec<f64>> = Vec::with_capacity(n_frames);
+    let mut frame_energies: Vec<f64> = Vec::with_capacity(n_frames);
+    for f_idx in 0..n_frames {
+        let start = f_idx * hop;
+        for i in 0..win_len {
+            let s = input[start + i];
+            let v = if s.is_finite() { f64::from(s) } else { 0.0 };
+            fft_buf[i] = Complex::new(v * win[i], 0.0);
+        }
+        fft.process(&mut fft_buf);
+        let mut psd = vec![0.0_f64; n_bins];
+        let mut total_e = 0.0_f64;
+        for k in 0..n_bins {
+            let scale = if k == 0 || k == n_bins - 1 { 1.0 } else { 2.0 };
+            let p = scale * fft_buf[k].norm_sqr() / (win_len as f64 * win_pow_sum);
+            psd[k] = p;
+            total_e += p;
+        }
+        frame_energies.push(total_e);
+        frame_powers.push(psd);
+    }
+
+    let q12_idx = ((n_frames as f64 * 0.12).floor() as usize).min(n_frames - 1);
+    let q50_idx = (n_frames / 2).min(n_frames - 1);
+    let active_idx = ((n_frames as f64 * 0.85).floor() as usize).min(n_frames - 1);
+
+    let exp_q12_factor = -(1.0_f64 - 0.12_f64).ln(); // ~0.127833
+    let exp_q50_factor = std::f64::consts::LN_2; // ~0.693147
+
+    let mut col = vec![0.0_f64; n_frames];
+    let mut unbiased_stationary_e = 0.0_f64;
+    for k in 0..n_bins {
+        for (fi, row) in frame_powers.iter().enumerate() {
+            col[fi] = row[k];
+        }
+        col.sort_by(f64::total_cmp);
+        let est_q12 = col[q12_idx] / exp_q12_factor;
+        let est_q50 = col[q50_idx] / exp_q50_factor;
+        unbiased_stationary_e += est_q12.min(est_q50);
+    }
+
+    let mut sorted_e = frame_energies;
+    sorted_e.sort_by(f64::total_cmp);
+    let frame_quiet_e = sorted_e[q12_idx].max(1e-18);
+    let quiet_e = frame_quiet_e
+        .min(unbiased_stationary_e.max(1e-18))
+        .max(1e-18);
+    let active_e = sorted_e[active_idx].max(quiet_e);
+    (quiet_e, active_e)
+}
+
 /// Condition a noisy, reverberant bedroom recording into a clean internal analysis buffer
 /// so cue extraction (`analyze_guitar` + spectral envelope tracking) sees the dry performance
 /// rather than room boxiness, fan hiss, or AC hum.
@@ -278,22 +377,22 @@ pub fn condition_bedroom_for_analysis(input: &[f32], rate: u32) -> (Vec<f32>, Be
         }
     }
 
-    // Estimate signal-vs-noise ratio & spectral tilt from active vs quiet frames
-    let mut sorted_e = frame_energies.clone();
-    sorted_e.sort_by(f64::total_cmp);
-    let quiet_e = sorted_e[q_idx].max(1e-18);
-    let active_idx = ((n_frames as f64 * 0.85).floor() as usize).min(n_frames.saturating_sub(1));
-    let active_e = sorted_e[active_idx].max(quiet_e);
+    // Estimate signal-vs-noise ratio from high-resolution Blackman-Harris stationary noise floor.
+    // This eliminates Hann sidelobe leakage across closely spaced legato notes while staying
+    // Parseval-calibrated on real broadband Gaussian noise and stationary mains hum.
+    let (quiet_e, active_e) = estimate_stationary_noise_and_active_power(input, rate);
     let noise_floor_dbfs = (10.0 * quiet_e.log10()).clamp(-120.0, 0.0);
     let estimated_snr_db = (10.0 * (active_e / quiet_e).log10()).clamp(0.0, 90.0);
 
     // Estimate bedroom late decay time from sharpest downward energy slopes
+    // (frame_energies uses half-spectrum scaling without the 2x one-sided multiplier).
+    let stft_quiet_e = (quiet_e * 0.5).max(1e-18);
     let hop_s = hop as f64 / fs;
     let mut decay_rates = Vec::new();
     for i in 1..frame_energies.len() {
         let prev = frame_energies[i - 1];
         let cur = frame_energies[i];
-        if prev > quiet_e * 8.0 && cur > quiet_e * 2.0 && cur < prev * 0.96 {
+        if prev > stft_quiet_e * 8.0 && cur > stft_quiet_e * 2.0 && cur < prev * 0.96 {
             let db_drop = 10.0 * (prev / cur).log10();
             if db_drop > 0.25 && db_drop < 12.0 {
                 decay_rates.push(db_drop / hop_s);
@@ -398,20 +497,8 @@ pub fn condition_bedroom_for_analysis(input: &[f32], rate: u32) -> (Vec<f32>, Be
         conditioned[i] = if v.is_finite() { v as f32 } else { 0.0 };
     }
 
-    // Measure post-conditioning noise-floor improvement on the quietest 12% of frames
-    let mut cond_energies = Vec::with_capacity(n_frames);
-    for f_idx in 0..n_frames {
-        let start = f_idx * hop;
-        let mut e = 0.0_f64;
-        for i in 0..win_len {
-            let s = f64::from(conditioned.get(start + i).copied().unwrap_or(0.0));
-            e += s * s * win[i] * win[i];
-        }
-        cond_energies.push(e / win_pow_sum);
-    }
-    cond_energies.sort_by(f64::total_cmp);
-    let cond_quiet = cond_energies[q_idx].max(1e-18);
-    let cond_active = cond_energies[active_idx].max(cond_quiet);
+    // Measure post-conditioning noise-floor improvement with the same calibrated estimator
+    let (cond_quiet, cond_active) = estimate_stationary_noise_and_active_power(&conditioned, rate);
     let cond_snr_db = (10.0 * (cond_active / cond_quiet).log10()).clamp(0.0, 90.0);
 
     // 3-octave span from ~300 Hz to ~2400 Hz
@@ -657,5 +744,64 @@ mod tests {
             .resonance_peaks_hz
             .iter()
             .any(|&p| (1100.0..=1900.0).contains(&p)));
+    }
+
+    #[test]
+    fn stationary_snr_estimator_is_calibrated_across_clean_and_noisy_sustaining_melodies() {
+        let rate = 48_000_u32;
+        let fs = f64::from(rate);
+        let n = rate as usize * 3;
+        let freqs = [196.0, 220.0, 246.94, 293.66, 329.63, 392.0];
+        let mut clean = vec![0.0_f32; n];
+        for i in 0..n {
+            let t = i as f64 / fs;
+            let step = ((t / 0.5).floor() as usize).min(freqs.len() - 1);
+            let local_t = t - step as f64 * 0.5;
+            let env = (-local_t / 0.35).exp();
+            let f0 = freqs[step];
+            clean[i] =
+                (0.35 * env * ((TAU * f0 * t).sin() + 0.4 * (TAU * 2.0 * f0 * t).sin())) as f32;
+        }
+
+        // 1. Clean noiseless legato melody must not suffer sidelobe leakage false noise floor
+        let (_, clean_prof) = condition_bedroom_for_analysis(&clean, rate);
+        assert!(
+            clean_prof.estimated_snr_db >= 40.0,
+            "clean noiseless melody should report >= 40 dB SNR, got {:.1} dB (floor {:.1} dBFS)",
+            clean_prof.estimated_snr_db,
+            clean_prof.noise_floor_dbfs
+        );
+
+        // 2. Calibrated broadband white noise at two known amplitudes (-33.9 dBFS & -48.9 dBFS)
+        let add_white = |amp: f64| -> Vec<f32> {
+            let mut rng = 0x1234_5678_9abc_def0_u64;
+            clean
+                .iter()
+                .map(|&s| {
+                    rng = rng
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
+                    let u = (rng >> 32) as u32;
+                    let w = (f64::from(u) / f64::from(u32::MAX)) * 2.0 - 1.0;
+                    s + (w * amp) as f32
+                })
+                .collect()
+        };
+
+        let (_, noisy_20) = condition_bedroom_for_analysis(&add_white(0.035), rate);
+        assert!(
+            (17.5..=24.5).contains(&noisy_20.estimated_snr_db),
+            "~20.6 dB true SNR melody should estimate within [17.5, 24.5] dB, got {:.1} dB",
+            noisy_20.estimated_snr_db
+        );
+
+        let (_, noisy_35) = condition_bedroom_for_analysis(&add_white(0.0062), rate);
+        assert!(
+            noisy_35.estimated_snr_db > noisy_20.estimated_snr_db + 11.0
+                && noisy_35.estimated_snr_db < 42.0,
+            "15 dB quieter noise should raise estimated SNR linearly (~35 dB), got {:.1} dB vs {:.1} dB",
+            noisy_35.estimated_snr_db,
+            noisy_20.estimated_snr_db
+        );
     }
 }

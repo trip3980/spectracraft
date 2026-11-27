@@ -16,14 +16,48 @@ interface UseAudioEngineOptions {
   hasSession: boolean;
 }
 
+export interface PlaybackClockAnchor {
+  startCtxTimeS: number;
+  startOffsetS: number;
+  activeDurationS: number;
+}
+
+/**
+ * Pure playback position computation from AudioContext.currentTime and explicit anchor (Audit M12).
+ */
+export function computePlaybackPositionS(
+  anchor: PlaybackClockAnchor,
+  nowCtxTimeS: number,
+): number {
+  const elapsed = Math.max(0, nowCtxTimeS - anchor.startCtxTimeS);
+  const maxDur = Math.max(0, anchor.activeDurationS);
+  return Math.max(0, Math.min(maxDur, anchor.startOffsetS + elapsed));
+}
+
+/**
+ * Pure crossfade target offset derived directly from the live AudioContext clock
+ * (never stale RAF state) and clamped safely inside the destination buffer's duration (Audit M12).
+ */
+export function computeCrossfadeOffsetS(
+  anchor: PlaybackClockAnchor,
+  nowCtxTimeS: number,
+  nextBufferDurationS: number,
+): number {
+  const livePos = computePlaybackPositionS(anchor, nowCtxTimeS);
+  const safeMax = Math.max(0, nextBufferDurationS - 0.02);
+  return Math.max(0, Math.min(safeMax, livePos));
+}
+
 /**
  * Single-responsibility Web Audio playback & seamless crossfade engine (Refactoring §3d).
  *
  * Invariants:
- * - Playback engine owns playhead; UI redraws or layout changes never trigger a seek.
- * - Switching takes preserves the exact playhead timestamp.
+ * - Playback engine owns playhead via AudioContext.currentTime + explicit anchors (Audit M12).
+ * - UI redraws or layout changes never trigger a seek.
+ * - Switching takes or crossfading to a longer capture tail updates activeDurationSRef immediately
+ *   so the playhead never caps at an earlier buffer's duration.
  * - Live Preview background re-renders smoothly crossfade (40 ms GainNode ramp) at the
- *   current playhead without stopping or restarting playback.
+ *   live AudioContext clock timestamp without stopping or restarting playback.
  */
 export function useAudioEngine({
   origBuffer,
@@ -52,6 +86,7 @@ export function useAudioEngine({
   );
   const playStartCtxTimeRef = useRef(0);
   const playStartOffsetRef = useRef(0);
+  const activeDurationSRef = useRef(0);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -66,6 +101,20 @@ export function useAudioEngine({
       audioCtxRef.current = new Ctx();
     }
     return audioCtxRef.current;
+  }, []);
+
+  const readLivePlayheadS = useCallback((): number => {
+    if (!isPlayingRef.current || !audioCtxRef.current) {
+      return playheadRef.current;
+    }
+    return computePlaybackPositionS(
+      {
+        startCtxTimeS: playStartCtxTimeRef.current,
+        startOffsetS: playStartOffsetRef.current,
+        activeDurationS: activeDurationSRef.current,
+      },
+      audioCtxRef.current.currentTime,
+    );
   }, []);
 
   const stopPlaybackNode = useCallback(() => {
@@ -109,10 +158,13 @@ export function useAudioEngine({
   }, []);
 
   const decodeWavUrl = useCallback(
-    async (url: string): Promise<AudioBuffer> => {
-      const res = await fetch(url);
+    async (url: string, signal?: AbortSignal): Promise<AudioBuffer> => {
+      const res = await fetch(url, signal ? { signal } : undefined);
       if (!res.ok) throw new Error(`Failed to fetch WAV (${res.status})`);
       const arr = await res.arrayBuffer();
+      if (signal?.aborted) {
+        throw new DOMException('Audio decode aborted', 'AbortError');
+      }
       const ctx = ensureAudioContext();
       return ctx.decodeAudioData(arr.slice(0));
     },
@@ -146,13 +198,48 @@ export function useAudioEngine({
     [origBuffer, regenBuffer, capturedBuffer, diffBuffer, previewBitDepth, ensureAudioContext],
   );
 
+  const scheduleTickLoop = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    const tick = () => {
+      if (!isPlayingRef.current || !audioCtxRef.current) return;
+      const currentDur = activeDurationSRef.current;
+      const pos = computePlaybackPositionS(
+        {
+          startCtxTimeS: playStartCtxTimeRef.current,
+          startOffsetS: playStartOffsetRef.current,
+          activeDurationS: currentDur,
+        },
+        audioCtxRef.current.currentTime,
+      );
+      playheadRef.current = pos;
+      setPlayheadS(pos);
+      if (pos < currentDur && isPlayingRef.current) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        rafRef.current = null;
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
   const crossfadeToBuffer = useCallback(
     (nextBuf: AudioBuffer) => {
       if (!isPlayingRef.current || !audioCtxRef.current) return;
       const ctx = audioCtxRef.current;
       const now = ctx.currentTime;
       const fadeS = 0.04;
-      const pos = Math.max(0, Math.min(nextBuf.duration - 0.02, playheadRef.current));
+      const pos = computeCrossfadeOffsetS(
+        {
+          startCtxTimeS: playStartCtxTimeRef.current,
+          startOffsetS: playStartOffsetRef.current,
+          activeDurationS: activeDurationSRef.current,
+        },
+        now,
+        nextBuf.duration,
+      );
       const matchDb = takeModeRef.current === 'regenerated' && levelMatchAb ? abDryMatchGainDb : 0;
       const targetGain = dbToSafeLinearGain(matchDb);
 
@@ -198,6 +285,8 @@ export function useAudioEngine({
       activeGainRef.current = newGain;
       playStartCtxTimeRef.current = now;
       playStartOffsetRef.current = pos;
+      activeDurationSRef.current = nextBuf.duration;
+      playheadRef.current = pos;
 
       newSrc.onended = () => {
         if (activeSourceRef.current === newSrc) {
@@ -207,8 +296,10 @@ export function useAudioEngine({
           setIsPlaying(false);
         }
       };
+
+      scheduleTickLoop();
     },
-    [levelMatchAb, abDryMatchGainDb],
+    [levelMatchAb, abDryMatchGainDb, scheduleTickLoop],
   );
 
   // Live-update gain when A/B level-match setting toggles during active playback
@@ -248,7 +339,7 @@ export function useAudioEngine({
       if (ctx.state === 'suspended') {
         void ctx.resume();
       }
-      const clamped = Math.max(0, Math.min(buf.duration - 0.01, offsetS));
+      const clamped = Math.max(0, Math.min(Math.max(0, buf.duration - 0.01), offsetS));
       const src = ctx.createBufferSource();
       const gainNode = ctx.createGain();
       const matchDb = mode === 'regenerated' && levelMatchAb ? abDryMatchGainDb : 0;
@@ -262,6 +353,7 @@ export function useAudioEngine({
       activeGainRef.current = gainNode;
       playStartCtxTimeRef.current = ctx.currentTime;
       playStartOffsetRef.current = clamped;
+      activeDurationSRef.current = buf.duration;
       playheadRef.current = clamped;
       isPlayingRef.current = true;
       setIsPlaying(true);
@@ -275,53 +367,59 @@ export function useAudioEngine({
         }
       };
 
-      const tick = () => {
-        if (!isPlayingRef.current || !audioCtxRef.current) return;
-        const elapsed = audioCtxRef.current.currentTime - playStartCtxTimeRef.current;
-        const pos = Math.min(buf.duration, playStartOffsetRef.current + elapsed);
-        playheadRef.current = pos;
-        setPlayheadS(pos);
-        if (pos < buf.duration && isPlayingRef.current) {
-          rafRef.current = requestAnimationFrame(tick);
-        }
-      };
-      rafRef.current = requestAnimationFrame(tick);
+      scheduleTickLoop();
     },
-    [getPlaybackBufferForTake, stopPlaybackNode, ensureAudioContext, levelMatchAb, abDryMatchGainDb],
+    [
+      getPlaybackBufferForTake,
+      stopPlaybackNode,
+      ensureAudioContext,
+      levelMatchAb,
+      abDryMatchGainDb,
+      scheduleTickLoop,
+    ],
   );
 
   const togglePlay = useCallback(() => {
     if (!hasSession) return;
     if (isPlayingRef.current) {
+      const stoppedAt = readLivePlayheadS();
       stopPlaybackNode();
+      playheadRef.current = stoppedAt;
+      setPlayheadS(stoppedAt);
       isPlayingRef.current = false;
       setIsPlaying(false);
     } else {
-      const startAt = playheadRef.current >= durationS - 0.05 ? 0 : playheadRef.current;
-      startPlaybackAt(startAt, takeMode);
+      const activeBuf = getPlaybackBufferForTake(takeModeRef.current);
+      const effectiveDur = activeBuf?.duration ?? durationS;
+      const startAt = playheadRef.current >= effectiveDur - 0.05 ? 0 : playheadRef.current;
+      startPlaybackAt(startAt, takeModeRef.current);
     }
-  }, [hasSession, durationS, takeMode, startPlaybackAt, stopPlaybackNode]);
+  }, [hasSession, durationS, startPlaybackAt, stopPlaybackNode, readLivePlayheadS, getPlaybackBufferForTake]);
 
   const seek = useCallback(
     (nextS: number) => {
-      const clamped = Math.max(0, Math.min(durationS, nextS));
+      const activeBuf = getPlaybackBufferForTake(takeModeRef.current);
+      const effectiveDur = Math.max(durationS, activeBuf?.duration ?? 0);
+      const clamped = Math.max(0, Math.min(effectiveDur, nextS));
       playheadRef.current = clamped;
       setPlayheadS(clamped);
       if (isPlayingRef.current) {
-        startPlaybackAt(clamped, takeMode);
+        startPlaybackAt(clamped, takeModeRef.current);
       }
     },
-    [durationS, takeMode, startPlaybackAt],
+    [durationS, startPlaybackAt, getPlaybackBufferForTake],
   );
 
   const switchTake = useCallback(
     (nextTake: TakeMode) => {
+      const livePos = readLivePlayheadS();
+      takeModeRef.current = nextTake;
       setTakeMode(nextTake);
       if (isPlayingRef.current) {
-        startPlaybackAt(playheadRef.current, nextTake);
+        startPlaybackAt(livePos, nextTake);
       }
     },
-    [startPlaybackAt],
+    [startPlaybackAt, readLivePlayheadS],
   );
 
   const resetTransport = useCallback(

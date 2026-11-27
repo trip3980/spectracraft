@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, FileJson, Lock, Share2, X } from 'lucide-react';
 import {
   ALL_VARIANTS,
@@ -10,6 +10,7 @@ import {
   type VariantsManifest,
 } from '../lib/workbench.ts';
 import type { PipelineRenderResponse } from '../lib/studioRig.ts';
+import { getTransport } from '../lib/transport.ts';
 
 type DawTargetId = 'audition' | 'logic' | 'daw' | 'soundcraft';
 
@@ -53,7 +54,16 @@ interface ExportModalProps {
   activeDryUrl: string | null;
   activeCuesUrl: string | null;
   activeCuesRunId?: string | null;
+  activeDryRevisionId?: string | null;
+  activeDrySha256?: string | null;
   pipelineResult?: PipelineRenderResponse | null;
+  pipelineStale?: boolean;
+  onExportDawBundle?: (req: {
+    target: DawTargetId;
+    bitDepth: '24' | '32';
+    cuesRunId: string;
+    pipelineRunId: string;
+  }) => Promise<DawInterchangeResult>;
 }
 
 export function ExportModal({
@@ -71,40 +81,53 @@ export function ExportModal({
   activeDryUrl,
   activeCuesUrl,
   activeCuesRunId = null,
+  activeDryRevisionId = null,
+  activeDrySha256 = null,
   pipelineResult = null,
+  pipelineStale = false,
+  onExportDawBundle,
 }: ExportModalProps) {
   const [dawTarget, setDawTarget] = useState<DawTargetId>('audition');
   const [dawBitDepth, setDawBitDepth] = useState<'24' | '32'>('24');
   const [dawBusy, setDawBusy] = useState(false);
   const [dawError, setDawError] = useState<string | null>(null);
   const [dawResult, setDawResult] = useState<DawInterchangeResult | null>(null);
+  const exportEpochRef = useRef(0);
+
+  // Reset local DAW export state whenever the session, active dry revision, or pipeline run changes (Audit H5)
+  useEffect(() => {
+    exportEpochRef.current += 1;
+    setDawResult(null);
+    setDawError(null);
+    setDawBusy(false);
+  }, [session?.id, activeDryRevisionId, activeCuesRunId, pipelineResult?.runId]);
 
   if (!open || !session) return null;
 
   async function handleDawExport() {
     if (!session) return;
+    const reqEpoch = ++exportEpochRef.current;
     setDawBusy(true);
     setDawError(null);
     try {
-      const resp = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/daw-export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target: dawTarget,
-          bitDepth: dawBitDepth,
-          cuesRunId: activeCuesRunId ?? '',
-          pipelineRunId: pipelineResult?.runId ?? '',
-        }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error || 'DAW interchange export failed.');
-      }
-      setDawResult(data as DawInterchangeResult);
+      const payload = {
+        target: dawTarget,
+        bitDepth: dawBitDepth,
+        cuesRunId: activeCuesRunId ?? '',
+        pipelineRunId: !pipelineStale ? (pipelineResult?.runId ?? '') : '',
+      };
+      const result: DawInterchangeResult = onExportDawBundle
+        ? await onExportDawBundle(payload)
+        : await getTransport().exportDawInterchange(session.id, payload);
+      if (reqEpoch !== exportEpochRef.current) return;
+      setDawResult(result);
     } catch (err) {
+      if (reqEpoch !== exportEpochRef.current) return;
       setDawError(err instanceof Error ? err.message : String(err));
     } finally {
-      setDawBusy(false);
+      if (reqEpoch === exportEpochRef.current) {
+        setDawBusy(false);
+      }
     }
   }
 
@@ -126,6 +149,7 @@ export function ExportModal({
                 <div className="font-medium text-[#e4e4e4]">Dry Take WAV (Unmastered)</div>
                 <div className="font-mono text-[10px] text-[#909090]">
                   Peak {formatDbfs(session.verification.dry_peak_dbfs)} · headroom preserved · original never overwritten
+                  {activeDrySha256 ? ` · SHA ${activeDrySha256.slice(0, 10)}` : ''}
                 </div>
               </div>
               {activeDryUrl && (
@@ -158,8 +182,13 @@ export function ExportModal({
             {pipelineResult?.wavUrl && (
               <div className="pt-2 border-t border-[#2e2e2e] flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-medium text-[#e4e4e4]">
-                    Final Pipeline Take WAV (Stages 3–5)
+                  <div className="font-medium text-[#e4e4e4] flex items-center gap-1.5">
+                    <span>Final Pipeline Take WAV (Stages 3–5)</span>
+                    {pipelineStale && (
+                      <span className="px-1 py-0.2 bg-[#3b2b14] border border-[#7c5d2c] text-[#f4d08b] font-mono text-[9px]">
+                        STALE — re-render for active dry revision
+                      </span>
+                    )}
                   </div>
                   <div className="font-mono text-[10px] text-[#909090] truncate">
                     {pipelineResult.summary.bit_identical_to_dry

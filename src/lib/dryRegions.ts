@@ -42,6 +42,8 @@ export interface DryRegionHistoryState {
   selectedId: string | null;
   past: DryRegion[][];
   future: DryRegion[][];
+  /** Transient gesture-start snapshot captured when a drag/resize begins (M5). */
+  gestureBaseline?: DryRegion[] | null;
 }
 
 export const REGION_FIX_ACTIONS: readonly {
@@ -61,17 +63,49 @@ export const MIN_REGION_HZ_SPAN = 40;
 export const MAX_REGION_HZ = 12000;
 export const MIN_REGION_HZ = 20;
 
+let regionIdSeq = 0;
+
+/** Generate a globally unique, monotonic region ID that never collides after deletes (Audit M5). */
+export function nextUniqueRegionId(): string {
+  regionIdSeq += 1;
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `reg-${regionIdSeq}-${suffix}`;
+}
+
 export function createInitialDryRegionHistory(): DryRegionHistoryState {
   return {
     regions: [],
     selectedId: null,
     past: [],
     future: [],
+    gestureBaseline: null,
   };
 }
 
 function cloneRegions(list: DryRegion[]): DryRegion[] {
   return list.map((r) => ({ ...r }));
+}
+
+function regionsEqual(a: DryRegion[], b: DryRegion[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.startS !== y.startS ||
+      x.endS !== y.endS ||
+      x.minHz !== y.minHz ||
+      x.maxHz !== y.maxHz ||
+      x.action !== y.action ||
+      x.strength !== y.strength ||
+      x.crossfadeMs !== y.crossfadeMs ||
+      x.note !== y.note
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function clampRegionBounds(
@@ -126,8 +160,12 @@ export function addDryRegion(
   },
   durationS: number,
 ): DryRegionHistoryState {
-  const nextNum = state.regions.length + 1;
-  const id = `reg-${nextNum}-${Math.round(input.startS * 1000)}`;
+  const existingNums = state.regions.map((r) => {
+    const m = /\b(\d+)$/.exec(r.label);
+    return m ? Number(m[1]) : 0;
+  });
+  const nextNum = Math.max(state.regions.length, ...existingNums) + 1;
+  const id = nextUniqueRegionId();
   const region = clampRegionBounds(
     {
       id,
@@ -151,6 +189,77 @@ export function addDryRegion(
     selectedId: region.id,
     past: [...state.past.slice(-39), cloneRegions(state.regions)],
     future: [],
+    gestureBaseline: null,
+  };
+}
+
+/** Capture gesture-start snapshot before interactive drag/resize preview updates (Audit M5). */
+export function beginRegionGesture(state: DryRegionHistoryState): DryRegionHistoryState {
+  return {
+    ...state,
+    gestureBaseline: cloneRegions(state.regions),
+  };
+}
+
+/** Update region geometry transiently during pointer drag without polluting undo history (Audit M5). */
+export function previewRegionGesture(
+  state: DryRegionHistoryState,
+  id: string,
+  patch: Partial<DryRegion>,
+  durationS: number,
+): DryRegionHistoryState {
+  const idx = state.regions.findIndex((r) => r.id === id);
+  if (idx < 0) return state;
+  const baseline = state.gestureBaseline ?? cloneRegions(state.regions);
+  const updated = state.regions.map((r) =>
+    r.id === id ? clampRegionBounds({ ...r, ...patch }, durationS) : r,
+  );
+  return {
+    ...state,
+    regions: updated,
+    gestureBaseline: baseline,
+  };
+}
+
+/**
+ * Commit an interactive drag/resize gesture using the captured gesture-start baseline,
+ * producing exactly ONE undo entry pointing back to the starting geometry (Audit M5).
+ */
+export function commitRegionGesture(
+  state: DryRegionHistoryState,
+  id: string,
+  patch: Partial<DryRegion>,
+  durationS: number,
+): DryRegionHistoryState {
+  const idx = state.regions.findIndex((r) => r.id === id);
+  if (idx < 0) return { ...state, gestureBaseline: null };
+  const baseline = state.gestureBaseline ?? cloneRegions(state.regions);
+  const updated = state.regions.map((r) =>
+    r.id === id ? clampRegionBounds({ ...r, ...patch }, durationS) : r,
+  );
+  if (regionsEqual(baseline, updated)) {
+    return {
+      ...state,
+      regions: updated,
+      gestureBaseline: null,
+    };
+  }
+  return {
+    regions: updated,
+    selectedId: state.selectedId,
+    past: [...state.past.slice(-39), cloneRegions(baseline)],
+    future: [],
+    gestureBaseline: null,
+  };
+}
+
+/** Cancel an in-progress drag gesture, restoring the exact gesture-start regions (Audit M5). */
+export function cancelRegionGesture(state: DryRegionHistoryState): DryRegionHistoryState {
+  if (!state.gestureBaseline) return state;
+  return {
+    ...state,
+    regions: cloneRegions(state.gestureBaseline),
+    gestureBaseline: null,
   };
 }
 
@@ -161,6 +270,12 @@ export function updateDryRegion(
   durationS: number,
   recordHistory = true,
 ): DryRegionHistoryState {
+  if (!recordHistory) {
+    return previewRegionGesture(state, id, patch, durationS);
+  }
+  if (state.gestureBaseline) {
+    return commitRegionGesture(state, id, patch, durationS);
+  }
   const idx = state.regions.findIndex((r) => r.id === id);
   if (idx < 0) return state;
   const updated = state.regions.map((r) =>
@@ -169,8 +284,9 @@ export function updateDryRegion(
   return {
     regions: updated,
     selectedId: state.selectedId,
-    past: recordHistory ? [...state.past.slice(-39), cloneRegions(state.regions)] : state.past,
-    future: recordHistory ? [] : state.future,
+    past: [...state.past.slice(-39), cloneRegions(state.regions)],
+    future: [],
+    gestureBaseline: null,
   };
 }
 
@@ -187,6 +303,7 @@ export function deleteDryRegion(
     selectedId: nextSelected,
     past: [...state.past.slice(-39), cloneRegions(state.regions)],
     future: [],
+    gestureBaseline: null,
   };
 }
 

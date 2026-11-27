@@ -43,27 +43,62 @@ export function countPassedDryCriteria(checklist: DryListeningChecklist): number
 }
 
 /**
- * Core Design Contract invariant:
- * Post-processing (Capture / Room / Mic / Variants) is strictly unlocked ONLY when
- * all 5 human listening checks pass on the current dry reconstruction.
+ * Human listening review checklist status (SC-GOV-04 / SC-STATE-04):
+ * Returns true only when an explicit human reviewer has checked all 5 criteria on
+ * the exact active dry revision. Under SPECTRACRAFT_SPEC.md Section 14, this records
+ * human approval separately and does NOT block valid Candidate audition or stage export.
  */
 export function isDryListeningPassed(checklist: DryListeningChecklist): boolean {
   return countPassedDryCriteria(checklist) === DRY_LISTENING_CRITERIA.length;
 }
 
-export type PipelineStage = 'empty' | 'analysis' | 'cues' | 'dry_gate' | 'post_unlocked';
+export type DryReviewLabel = 'unavailable' | 'candidate' | 'approved';
+
+/**
+ * Resolves the truthful review label for a generated take (SPECTRACRAFT_SPEC.md §14 / SC-GOV-04).
+ * Valid Candidate audition and stage export are permitted whenever `hasDryAudio` is true;
+ * `approved` requires both a complete checklist AND exact revision binding.
+ */
+export function resolveDryReviewLabel(params: {
+  hasDryAudio: boolean;
+  checklist: DryListeningChecklist;
+  approvalMatchesActiveDryRevision: boolean;
+}): DryReviewLabel {
+  if (!params.hasDryAudio) return 'unavailable';
+  if (isDryListeningPassed(params.checklist) && params.approvalMatchesActiveDryRevision) {
+    return 'approved';
+  }
+  return 'candidate';
+}
+
+/**
+ * Canonical Section 14 Candidate policy (SC-GOV-04):
+ * Dry-first requires an available generated dry take before downstream capture or stage
+ * export, but valid Candidate audition and stage export remain permitted without claiming
+ * human listening approval.
+ */
+export function isCandidateStageExportPermitted(params: {
+  hasSession: boolean;
+  hasDryAudio: boolean;
+}): boolean {
+  return params.hasSession && params.hasDryAudio;
+}
+
+export type PipelineStage = 'empty' | 'analysis' | 'cues' | 'dry_candidate' | 'dry_approved';
 
 export function computePipelineStage(params: {
   hasSession: boolean;
   noteCount: number;
   hasDryAudio: boolean;
   checklist: DryListeningChecklist;
+  approvalMatchesActiveDryRevision?: boolean;
 }): PipelineStage {
   if (!params.hasSession) return 'empty';
   if (params.noteCount <= 0) return 'analysis';
   if (!params.hasDryAudio) return 'cues';
-  if (!isDryListeningPassed(params.checklist)) return 'dry_gate';
-  return 'post_unlocked';
+  const revisionBound = params.approvalMatchesActiveDryRevision ?? true;
+  if (!isDryListeningPassed(params.checklist) || !revisionBound) return 'dry_candidate';
+  return 'dry_approved';
 }
 
 export type CueEvidenceClass = 'strong_coherent' | 'weak_consistent' | 'uncertain';

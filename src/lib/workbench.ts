@@ -154,6 +154,7 @@ export interface VerificationReport {
   source_peak_dbfs: number;
   source_rms_dbfs: number;
   dry_candidate_sha256: string;
+  cues_sha256?: string | null;
   dry_peak_dbfs: number;
   dry_rms_dbfs: number;
   full_duration_match: boolean;
@@ -433,7 +434,16 @@ export function sliceMonoWavBuffer(
   source: Uint8Array,
   startS: number,
   endS: number,
-): { buffer: Uint8Array; sampleRate: number; samples: number; startS: number; endS: number } {
+): {
+  buffer: Uint8Array;
+  sampleRate: number;
+  samples: number;
+  startS: number;
+  endS: number;
+  sourceEncoding: 'ieee_float_32' | 'pcm_8' | 'pcm_16' | 'pcm_24' | 'pcm_32';
+  sourceBitsPerSample: number;
+  convertedToFloat32: boolean;
+} {
   const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
   if (source.byteLength < 44) {
     throw new Error('WAV file is too short.');
@@ -477,14 +487,17 @@ export function sliceMonoWavBuffer(
     offset = body + size + (size % 2);
   }
 
-  if (dataOffset < 0 || channels !== 1 || sampleRate < 16000 || sampleRate > 96000) {
-    throw new Error('Editable layers require a mono 16–96 kHz WAV file.');
+  if (dataOffset < 0 || channels !== 1 || sampleRate < 8000 || sampleRate > 96000) {
+    throw new Error('Editable layers require a mono 8–96 kHz WAV file.');
   }
   const supported =
     (audioFormat === 3 && bitsPerSample === 32) ||
-    (audioFormat === 1 && (bitsPerSample === 16 || bitsPerSample === 24));
+    (audioFormat === 1 &&
+      (bitsPerSample === 8 || bitsPerSample === 16 || bitsPerSample === 24 || bitsPerSample === 32));
   if (!supported) {
-    throw new Error('Supported WAV formats for slicing are 32-bit float, 16-bit PCM, or 24-bit PCM.');
+    throw new Error(
+      'Supported WAV formats for slicing are 8/16/24/32-bit PCM or 32-bit IEEE float.',
+    );
   }
 
   const bytesPerSample = bitsPerSample / 8;
@@ -526,27 +539,73 @@ export function sliceMonoWavBuffer(
     let sample = 0;
     if (audioFormat === 3) {
       sample = view.getFloat32(srcIdx, true);
+    } else if (bitsPerSample === 8) {
+      // Standard RIFF/WAVE 8-bit PCM is unsigned [0..255] centered at 128
+      sample = (source[srcIdx] - 128) / 128;
     } else if (bitsPerSample === 16) {
       sample = view.getInt16(srcIdx, true) / 32768;
-    } else {
+    } else if (bitsPerSample === 24) {
       const b0 = source[srcIdx];
       const b1 = source[srcIdx + 1];
       const b2 = source[srcIdx + 2];
       let v = b0 | (b1 << 8) | (b2 << 16);
       if (v & 0x800000) v |= ~0xffffff;
       sample = v / 8388608;
+    } else {
+      // 32-bit signed integer PCM
+      sample = view.getInt32(srcIdx, true) / 2147483648;
     }
     outView.setFloat32(44 + i * 4, sample, true);
   }
 
+  const sourceEncoding: 'ieee_float_32' | 'pcm_8' | 'pcm_16' | 'pcm_24' | 'pcm_32' =
+    audioFormat === 3
+      ? 'ieee_float_32'
+      : bitsPerSample === 8
+        ? 'pcm_8'
+        : bitsPerSample === 16
+          ? 'pcm_16'
+          : bitsPerSample === 24
+            ? 'pcm_24'
+            : 'pcm_32';
   return {
     buffer: out,
     sampleRate,
     samples: outSamples,
     startS: startFrame / sampleRate,
     endS: endFrame / sampleRate,
+    sourceEncoding,
+    sourceBitsPerSample: bitsPerSample,
+    convertedToFloat32: audioFormat !== 3,
   };
 }
+
+/**
+ * Explicit capability alignment across web upload, layer slicing, and native desktop workflows (Audit M13).
+ */
+export const WORKFLOW_CAPABILITIES = {
+  upload: {
+    channels: 'mono_only' as const,
+    minSampleRateHz: 8000,
+    maxSampleRateHz: 96000,
+    maxDurationS: 90,
+    supportedEncodings: ['pcm_8', 'pcm_16', 'pcm_24', 'pcm_32', 'ieee_float_32'] as const,
+  },
+  layerSlice: {
+    channels: 'mono_only' as const,
+    minSampleRateHz: 8000,
+    maxSampleRateHz: 96000,
+    minWindowS: 0.2,
+    maxWindowS: 29.5,
+    supportedEncodings: ['pcm_8', 'pcm_16', 'pcm_24', 'pcm_32', 'ieee_float_32'] as const,
+  },
+  nativeDesktop: {
+    channels: 'mono_or_stereo_folded_with_provenance' as const,
+    minSampleRateHz: 8000,
+    maxSampleRateHz: 96000,
+    maxExcerptRegenS: 30,
+  },
+} as const;
 
 export type WavHeaderCheck =
   | {

@@ -848,9 +848,112 @@ fn apply_stage3_mic_response(
     }
 }
 
-/// Render a mono dry performance through the active `StudioRig` with explicit Stage 3
-/// mic EQ toggle, optional oversampled Stage 3 preamp drive (`0.0` = bit-identical bypass),
-/// and optional un-truncated full room decay tail preservation.
+/// Maximum offline room decay tail rendered beyond the dry input + early reflections (seconds).
+pub const MAX_OFFLINE_TAIL_SECONDS: f64 = 10.0;
+
+/// Target decay threshold for dynamic offline room-tail preservation (dB below impulse peak).
+pub const TAIL_DECAY_THRESHOLD_DB: f64 = 90.0;
+
+fn trim_silent_tail(buf: &mut Vec<f32>, min_len: usize, threshold_lin: f32) {
+    if buf.len() <= min_len {
+        return;
+    }
+    let mut keep = buf.len();
+    while keep > min_len && buf[keep - 1].abs() < threshold_lin {
+        keep -= 1;
+    }
+    // Preserve a small 16-sample safety margin after the last audible tail sample.
+    let final_len = (keep + 16).min(buf.len()).max(min_len);
+    buf.truncate(final_len);
+}
+
+fn trim_silent_tail_stereo(left: &mut Vec<f32>, right: &mut Vec<f32>, min_len: usize, threshold_lin: f32) {
+    let n = left.len().min(right.len());
+    if n <= min_len {
+        return;
+    }
+    let mut keep = n;
+    while keep > min_len
+        && left[keep - 1].abs() < threshold_lin
+        && right[keep - 1].abs() < threshold_lin
+    {
+        keep -= 1;
+    }
+    let final_len = (keep + 16).min(n).max(min_len);
+    left.truncate(final_len);
+    right.truncate(final_len);
+}
+
+/// Render a mono dry performance through the active `StudioRig` with explicit timing mode
+/// (`Timing::Physical` for canonical calibrated distance attenuation & propagation delay, or
+/// `Timing::AlignDirect` for aligned/level-matched monitoring), Stage 3 mic EQ toggle,
+/// oversampled preamp drive, and dynamic un-truncated room decay tail preservation.
+#[allow(clippy::too_many_arguments)]
+pub fn render_studio_rig_with_timing(
+    input: &[f32],
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    sources: &[crate::studio_catalog::SourceEntry],
+    mics: &[crate::studio_catalog::MicEntry],
+    surfaces: &[crate::studio_catalog::SurfaceEntry],
+    timing: crate::studio_catalog::Timing,
+    apply_mic_eq: bool,
+    preamp_drive: f64,
+    preserve_tail: bool,
+) -> Vec<f32> {
+    if input.is_empty() {
+        return Vec::new();
+    }
+    let plan = crate::studio_catalog::capture_paths_6band(rig, sources, mics, surfaces, 4, timing);
+    let fdn_opt = build_closed_room_fdn(rate, rig, surfaces, &plan);
+    let fs = f64::from(rate.max(1));
+    let min_physical_len = input.len() + ((plan.last_path_s.max(0.0) * fs).ceil() as usize);
+    let mut roomed = if preserve_tail {
+        let extra_tail_s = fdn_opt
+            .as_ref()
+            .map(|f| f.recommended_tail_seconds(TAIL_DECAY_THRESHOLD_DB, MAX_OFFLINE_TAIL_SECONDS))
+            .unwrap_or(0.0);
+        crate::studio_catalog::render_capture_6band_with_tail(input, rate, &plan, extra_tail_s)
+    } else {
+        crate::studio_catalog::render_capture_6band(input, rate, &plan)
+    };
+    let fdn_scale = match timing {
+        crate::studio_catalog::Timing::Physical => {
+            (crate::studio_catalog::DIRECT_REF_DISTANCE_M / plan.distance_m.max(0.20)).clamp(0.0, 2.0)
+        }
+        crate::studio_catalog::Timing::AlignDirect => 1.0,
+    };
+    if let Some(mut fdn) = fdn_opt {
+        for (i, dst) in roomed.iter_mut().enumerate() {
+            let dry_s = input.get(i).copied().unwrap_or(0.0);
+            let clean = if dry_s.is_finite() {
+                f64::from(dry_s)
+            } else {
+                0.0
+            };
+            let late = fdn.tick(clean) * fdn_scale;
+            if late.is_finite() {
+                *dst += late as f32;
+            }
+        }
+    }
+    let mut out = if !apply_mic_eq {
+        roomed
+    } else {
+        apply_stage3_mic_response(&roomed, rate, rig, mics, &plan, preamp_drive)
+    };
+    if preserve_tail {
+        // Trim only truly inaudible trailing silence (< -96 dBFS) beyond dry + early reflections.
+        let min_len = min_physical_len.min(out.len());
+        trim_silent_tail(&mut out, min_len, 1.58e-5);
+    }
+    out
+}
+
+/// Render a mono dry performance through the active `StudioRig`.
+/// When `preserve_tail` is true (offline capture/export), preserves canonical physical propagation
+/// delay, calibrated inverse-distance gain, and complete dynamic room decay. When false (fixed-block
+/// auditioning), uses aligned direct timing matching `input.len()`.
 #[allow(clippy::too_many_arguments)]
 pub fn render_studio_rig_with_options(
     input: &[f32],
@@ -863,56 +966,36 @@ pub fn render_studio_rig_with_options(
     preamp_drive: f64,
     preserve_tail: bool,
 ) -> Vec<f32> {
-    if input.is_empty() {
-        return Vec::new();
-    }
-    let plan = crate::studio_catalog::capture_paths_6band(
+    let timing = if preserve_tail {
+        crate::studio_catalog::Timing::Physical
+    } else {
+        crate::studio_catalog::Timing::AlignDirect
+    };
+    render_studio_rig_with_timing(
+        input,
+        rate,
         rig,
         sources,
         mics,
         surfaces,
-        4,
-        crate::studio_catalog::Timing::AlignDirect,
-    );
-    let fdn_opt = build_closed_room_fdn(rate, rig, surfaces, &plan);
-    let mut roomed = if preserve_tail {
-        let extra_tail_s = if fdn_opt.is_some() { 1.25 } else { 0.0 };
-        crate::studio_catalog::render_capture_6band_with_tail(input, rate, &plan, extra_tail_s)
-    } else {
-        crate::studio_catalog::render_capture_6band(input, rate, &plan)
-    };
-    if let Some(mut fdn) = fdn_opt {
-        for (i, dst) in roomed.iter_mut().enumerate() {
-            let dry_s = input.get(i).copied().unwrap_or(0.0);
-            let clean = if dry_s.is_finite() {
-                f64::from(dry_s)
-            } else {
-                0.0
-            };
-            let late = fdn.tick(clean);
-            if late.is_finite() {
-                *dst += late as f32;
-            }
-        }
-    }
-    if !apply_mic_eq {
-        return roomed;
-    }
-    apply_stage3_mic_response(&roomed, rate, rig, mics, &plan, preamp_drive)
+        timing,
+        apply_mic_eq,
+        preamp_drive,
+        preserve_tail,
+    )
 }
 
-/// Render a dry performance into true stereo `[left, right]` with decorrelated Householder
-/// FDN stereo late-room bloom, LR4 6-band early reflections, JCA oblique porous absorption,
-/// ISO 9613-1 air absorption, spherical-wave proximity, digitized-FR minimum-phase FIR, and
-/// optional Stage 3 oversampled preamp coloration.
+/// Render a dry performance into true stereo `[left, right]` with explicit timing mode,
+/// decorrelated Householder FDN stereo late-room bloom, and dynamic un-truncated room decay.
 #[allow(clippy::too_many_arguments)]
-pub fn render_studio_rig_stereo_with_options(
+pub fn render_studio_rig_stereo_with_timing(
     input: &[f32],
     rate: u32,
     rig: &crate::studio_catalog::StudioRig,
     sources: &[crate::studio_catalog::SourceEntry],
     mics: &[crate::studio_catalog::MicEntry],
     surfaces: &[crate::studio_catalog::SurfaceEntry],
+    timing: crate::studio_catalog::Timing,
     apply_mic_eq: bool,
     preamp_drive: f64,
     preserve_tail: bool,
@@ -923,20 +1006,24 @@ pub fn render_studio_rig_stereo_with_options(
             right: Vec::new(),
         };
     }
-    let plan = crate::studio_catalog::capture_paths_6band(
-        rig,
-        sources,
-        mics,
-        surfaces,
-        4,
-        crate::studio_catalog::Timing::AlignDirect,
-    );
+    let plan = crate::studio_catalog::capture_paths_6band(rig, sources, mics, surfaces, 4, timing);
     let fdn_opt = build_closed_room_fdn(rate, rig, surfaces, &plan);
+    let fs = f64::from(rate.max(1));
+    let min_physical_len = input.len() + ((plan.last_path_s.max(0.0) * fs).ceil() as usize);
     let early = if preserve_tail {
-        let extra_tail_s = if fdn_opt.is_some() { 1.25 } else { 0.0 };
+        let extra_tail_s = fdn_opt
+            .as_ref()
+            .map(|f| f.recommended_tail_seconds(TAIL_DECAY_THRESHOLD_DB, MAX_OFFLINE_TAIL_SECONDS))
+            .unwrap_or(0.0);
         crate::studio_catalog::render_capture_6band_with_tail(input, rate, &plan, extra_tail_s)
     } else {
         crate::studio_catalog::render_capture_6band(input, rate, &plan)
+    };
+    let fdn_scale = match timing {
+        crate::studio_catalog::Timing::Physical => {
+            (crate::studio_catalog::DIRECT_REF_DISTANCE_M / plan.distance_m.max(0.20)).clamp(0.0, 2.0)
+        }
+        crate::studio_catalog::Timing::AlignDirect => 1.0,
     };
     let mut left = early.clone();
     let mut right = early;
@@ -950,29 +1037,66 @@ pub fn render_studio_rig_stereo_with_options(
             };
             let [late_l, late_r] = fdn.tick_stereo(clean);
             if late_l.is_finite() {
-                left[i] += late_l as f32;
+                left[i] += (late_l * fdn_scale) as f32;
             }
             if late_r.is_finite() {
-                right[i] += late_r as f32;
+                right[i] += (late_r * fdn_scale) as f32;
             }
         }
     }
-    if !apply_mic_eq {
-        return StereoAudio { left, right };
+    let (mut out_l, mut out_r) = if !apply_mic_eq {
+        (left, right)
+    } else {
+        (
+            apply_stage3_mic_response(&left, rate, rig, mics, &plan, preamp_drive),
+            apply_stage3_mic_response(&right, rate, rig, mics, &plan, preamp_drive),
+        )
+    };
+    if preserve_tail {
+        let min_len = min_physical_len.min(out_l.len());
+        trim_silent_tail_stereo(&mut out_l, &mut out_r, min_len, 1.58e-5);
     }
     StereoAudio {
-        left: apply_stage3_mic_response(&left, rate, rig, mics, &plan, preamp_drive),
-        right: apply_stage3_mic_response(&right, rate, rig, mics, &plan, preamp_drive),
+        left: out_l,
+        right: out_r,
     }
 }
 
-/// Render a dry performance through the active `StudioRig` using the exact 6-band image-source
-/// acoustic model across all 6 room faces (`[-X, +X, -Y, +Y, floor, ceiling]`), ISO 9613-1 air
-/// absorption, JCA oblique porous reflections, LR4 24 dB/oct reflected band crossover, cubic
-/// Lagrange fractional delays, energy-preserving Householder FDN late room tail (closed rooms),
-/// source radiation, mic position, 3D mic aim, frequency-dependent polar pickup, spherical-wave
-/// proximity effect, and digitized-FR minimum-phase (or parametric) mic EQ.
-/// Direct arrival stays sample-aligned with input. No implicit normalization, limiter, or dither.
+/// Render a dry performance into true stereo `[left, right]` with canonical physical timing when
+/// `preserve_tail` is true or aligned fixed-block monitoring when `preserve_tail` is false.
+#[allow(clippy::too_many_arguments)]
+pub fn render_studio_rig_stereo_with_options(
+    input: &[f32],
+    rate: u32,
+    rig: &crate::studio_catalog::StudioRig,
+    sources: &[crate::studio_catalog::SourceEntry],
+    mics: &[crate::studio_catalog::MicEntry],
+    surfaces: &[crate::studio_catalog::SurfaceEntry],
+    apply_mic_eq: bool,
+    preamp_drive: f64,
+    preserve_tail: bool,
+) -> StereoAudio {
+    let timing = if preserve_tail {
+        crate::studio_catalog::Timing::Physical
+    } else {
+        crate::studio_catalog::Timing::AlignDirect
+    };
+    render_studio_rig_stereo_with_timing(
+        input,
+        rate,
+        rig,
+        sources,
+        mics,
+        surfaces,
+        timing,
+        apply_mic_eq,
+        preamp_drive,
+        preserve_tail,
+    )
+}
+
+/// Render a dry performance through the active `StudioRig` for fixed-block aligned monitoring
+/// (direct arrival sample-aligned and level-matched, matching `input.len()`).
 pub fn render_studio_rig_with_mic_eq(
     input: &[f32],
     rate: u32,
@@ -982,21 +1106,23 @@ pub fn render_studio_rig_with_mic_eq(
     surfaces: &[crate::studio_catalog::SurfaceEntry],
     apply_mic_eq: bool,
 ) -> Vec<f32> {
-    render_studio_rig_with_options(
+    render_studio_rig_with_timing(
         input,
         rate,
         rig,
         sources,
         mics,
         surfaces,
+        crate::studio_catalog::Timing::AlignDirect,
         apply_mic_eq,
         0.0,
         false,
     )
 }
 
-/// Render a dry performance through the active `StudioRig` preserving the full physical
-/// early-reflection + Eyring FDN decay tail (for un-truncated offline WAV export).
+/// Render a dry performance through the active `StudioRig` using canonical physical propagation
+/// delay, calibrated inverse-distance direct attenuation, and complete dynamic room decay tail
+/// (for un-truncated offline WAV capture/export).
 pub fn render_studio_rig_with_tail(
     input: &[f32],
     rate: u32,
@@ -1006,13 +1132,14 @@ pub fn render_studio_rig_with_tail(
     surfaces: &[crate::studio_catalog::SurfaceEntry],
     apply_mic_eq: bool,
 ) -> Vec<f32> {
-    render_studio_rig_with_options(
+    render_studio_rig_with_timing(
         input,
         rate,
         rig,
         sources,
         mics,
         surfaces,
+        crate::studio_catalog::Timing::Physical,
         apply_mic_eq,
         0.0,
         true,

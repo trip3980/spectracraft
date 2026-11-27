@@ -44,10 +44,18 @@ If a future `craft-libs` release changes any of these signatures, only `report_e
 
 ### Step 1 — Check Current Pins & Compare Against Upstream (Launch or CLI)
 
-On startup (opt-in via `settings.updates.check_on_launch` in local `config.toml`), SpectraCraft runs a non-blocking background update check for pinned `craft-libs` crates and direct `Cargo.toml` dependencies. When updates are found, a non-modal banner offers three explicit choices:
-1. **`Update now`** — bumps explicit pins for selected crates, runs `cargo update`, and requires the mandatory 10-second 20 Hz–20 kHz sweep test and Rust unit suite to pass before completing (rolls back `Cargo.toml` / `Cargo.lock` automatically on failure).
-2. **`Download and update later`** — runs `cargo fetch --locked` only and records the staged target until explicit confirmation.
+On startup (opt-in via `settings.updates.check_on_launch` in local `config.toml`), SpectraCraft runs a non-blocking background update check for pinned `craft-libs` crates and direct `Cargo.toml` dependencies. Mutating update actions acquire an exclusive `.spectracraft-update.lock` and execute all Cargo resolution, fetches, and verification gates inside an isolated temporary staging workspace with explicit subprocess timeouts before atomically publishing manifests to the live workspace:
+1. **`Update now`** — stages explicit pin bumps in an isolated temporary workspace, runs `cargo update`, and requires both the mandatory 10-second 20 Hz–20 kHz sweep test and Rust library unit suite to pass before atomically publishing `Cargo.toml` / `Cargo.lock` (if live publish fails partway, restores pre-update snapshots and verifies SHA-256 bytes before reporting `rolled_back: true`).
+2. **`Download and update later`** — resolves and fetches the selected target's lockfile and crate sources inside isolated staging (without mutating live manifests) and persists a structured `StagedTarget { pin, kind, display_label }` for subsequent confirmation.
 3. **`Not now`** — does nothing and remembers dismissal for the session/version until next launch or a newer release.
+
+---
+
+### Optional `bench` Feature Advisory Review (`RUSTSEC-2026-0429` / `zip = 2.4.2`)
+
+- `zip = "=2.4.2"` is strictly an optional dependency behind `--features bench` (never compiled into default CLI, QA, native desktop, or Tauri 2 builds).
+- `RUSTSEC-2026-0429` affects `ZipArchive::extract`, which SpectraCraft **never calls** (`spectracraft-mono/src/bench.rs` only streams individual allowlisted WAV entries in memory).
+- Defense-in-depth bounds enforced in `spectracraft-mono/src/bench.rs`: `MAX_ARCHIVE_ENTRIES = 4096`, per-entry `Read::take(64 MiB)`, total archive budget `256 MiB`, and strict rejection of absolute/parent-traversal paths.
 
 From the CLI, run the read-only informational checker (never modifies files or fails builds):
 

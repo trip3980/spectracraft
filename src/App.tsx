@@ -44,6 +44,8 @@ import {
 } from './lib/contract.ts';
 import {
   addDryRegion,
+  beginRegionGesture,
+  cancelRegionGesture,
   createInitialDryRegionHistory,
   deleteDryRegion,
   redoDryRegionHistory,
@@ -54,6 +56,29 @@ import {
   type DryRegion,
   type DryRegionKind,
 } from './lib/dryRegions.ts';
+import {
+  PROJECT_SCHEMA_VERSION,
+  SessionEpochTracker,
+  createInitialAudioHistory,
+  getEffectiveDryRevision,
+  initAudioHistoryWithBase,
+  isApprovalValidForRevision,
+  isArtifactStaleForDry,
+  nextDryRevisionId,
+  parseAndValidateProjectFile,
+  pushStage1DryRevision,
+  pushStage2DryEditRevision,
+  redoAudioRevision,
+  setStage2Bypass,
+  undoAudioRevision,
+  type AudioRevisionHistoryState,
+  type DependentArtifactProvenance,
+  type DryRevision,
+  type ProjectEditTransactionRecord,
+  type ProjectFileV2,
+  type RevisionApproval,
+} from './lib/sessionState.ts';
+import { getTransport } from './lib/transport.ts';
 import {
   DEFAULT_PIPELINE_STAGES,
   DEFAULT_VOICING_CONTROLS,
@@ -86,7 +111,6 @@ import {
 import type {
   ReportExportResponse,
   TechnicalReport,
-  TechnicalReportApiResponse,
 } from './lib/technicalReport.ts';
 import type { EmbeddedDocMeta, HelpNavigationAction } from './lib/helpCatalog.ts';
 import {
@@ -265,6 +289,36 @@ export default function App() {
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [pipelineResult, setPipelineResult] = useState<PipelineRenderResponse | null>(null);
 
+  // Typed transport (Express HTTP in browser or native Tauri IPC in desktop bundle — Audit H1)
+  const transport = useMemo(() => getTransport(), []);
+
+  // Session epoch + AbortController registry preventing cross-session async races (Audit H4)
+  const sessionEpochRef = useRef<SessionEpochTracker>(new SessionEpochTracker());
+  const controllersRef = useRef<Map<string, AbortController>>(new Map());
+  const abortAllPending = useCallback(() => {
+    for (const ctrl of controllersRef.current.values()) {
+      ctrl.abort();
+    }
+    controllersRef.current.clear();
+  }, []);
+  const beginOpController = useCallback((opKey: string): AbortSignal => {
+    controllersRef.current.get(opKey)?.abort();
+    const ctrl = new AbortController();
+    controllersRef.current.set(opKey, ctrl);
+    return ctrl.signal;
+  }, []);
+
+  // Immutable Dry Audio Revision History + Revision-Bound Approval + Project Transactions (H5, H6, H7)
+  const [audioHistory, setAudioHistory] = useState<AudioRevisionHistoryState>(() =>
+    createInitialAudioHistory(),
+  );
+  const [dryApproval, setDryApproval] = useState<RevisionApproval | null>(null);
+  const [pipelineProvenance, setPipelineProvenance] =
+    useState<DependentArtifactProvenance | null>(null);
+  const [reportProvenance, setReportProvenance] =
+    useState<DependentArtifactProvenance | null>(null);
+  const [editTransactions, setEditTransactions] = useState<ProjectEditTransactionRecord[]>([]);
+
   // Studio Rig + Real Rust 6-Band Capture State + Undo/Redo History
   const [rigHistory, setRigHistory] = useState(() => createHistory<StudioRigState>(makeRoomPreset('small')));
   const rig = rigHistory.present;
@@ -274,11 +328,34 @@ export default function App() {
   const analysisSeqRef = useRef(0);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const projectInputRef = useRef<HTMLInputElement | null>(null);
 
+  const activeDryRevision = useMemo(() => getEffectiveDryRevision(audioHistory), [audioHistory]);
   const sampleRate = session?.verification.sample_rate ?? 48000;
   const durationS = session?.verification.duration_s ?? 0;
   const dryPassedCount = countPassedDryCriteria(dryChecklist);
-  const dryReviewApproved = isDryListeningPassed(dryChecklist);
+  const dryReviewApproved =
+    isDryListeningPassed(dryChecklist) &&
+    isApprovalValidForRevision(dryApproval, activeDryRevision);
+  const isPipelineStale = isArtifactStaleForDry(pipelineProvenance, activeDryRevision);
+  const isReportStale = isArtifactStaleForDry(reportProvenance, activeDryRevision);
+
+  // Guard browser unload when unsaved audio edits, cue patches, or dry regions exist (Audit H6)
+  useEffect(() => {
+    const hasUnsaved =
+      Boolean(session) &&
+      (audioHistory.past.length > 0 ||
+        editTransactions.length > 0 ||
+        Object.keys(cuePatches).length > 0 ||
+        regionHistory.regions.length > 0);
+    if (!hasUnsaved) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [session, audioHistory.past.length, editTransactions.length, cuePatches, regionHistory.regions.length]);
 
   // Dedicated Web Audio playback & crossfade hook (Refactoring §3d)
   const {
@@ -406,19 +483,8 @@ export default function App() {
   // Fetch local capture-reference studio catalogs once on mount
   useEffect(() => {
     let active = true;
-    fetch('/api/studio/catalogs')
-      .then(async (res) => {
-        const body = (await res.json().catch(() => null)) as
-          | (RustStudioCatalogs & { error?: string })
-          | null;
-        if (!res.ok) {
-          throw new Error(body?.error || `HTTP ${res.status}`);
-        }
-        if (!body) {
-          throw new Error('Empty catalog response');
-        }
-        return body;
-      })
+    transport
+      .getStudioCatalogs()
       .then((data: RustStudioCatalogs) => {
         if (active) setCatalogs(data);
       })
@@ -433,21 +499,19 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [transport]);
 
   const handleCheckUpdates = useCallback(async (online: boolean) => {
     setUpdateCheckBusy(true);
     try {
-      const res = await fetch(`/api/updates/check?online=${online ? '1' : '0'}`);
-      if (!res.ok) return;
-      const data = (await res.json()) as UpdateCheckReport;
+      const data = await transport.checkUpdates(online);
       setUpdateReport(data);
     } catch {
       // Background update check must never block or fail the workstation
     } finally {
       setUpdateCheckBusy(false);
     }
-  }, []);
+  }, [transport]);
 
   const applyWorkspacePrefsToUi = useCallback((ws: WorkspacePrefs) => {
     setWorkspacePrefs(ws);
@@ -487,20 +551,16 @@ export default function App() {
         workspace: nextWs,
       };
       setSettingsSnapshot((prev) => (prev ? { ...prev, settings: nextSettings } : prev));
-      fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(nextSettings),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((snap: SettingsSnapshot | null) => {
-          if (snap) setSettingsSnapshot(snap);
+      transport
+        .saveSettings(nextSettings)
+        .then((snap: SettingsSnapshot) => {
+          setSettingsSnapshot(snap);
         })
         .catch(() => {
           // Non-blocking persistence; local UI state already reflects user choice
         });
     },
-    [workspacePrefs, settingsSnapshot, applyWorkspacePrefsToUi],
+    [workspacePrefs, settingsSnapshot, applyWorkspacePrefsToUi, transport],
   );
 
   const openRightPanelTab = useCallback(
@@ -518,9 +578,10 @@ export default function App() {
   // Load persisted ArtCraft craft-settings on launch and trigger optional non-blocking update check
   useEffect(() => {
     let active = true;
-    fetch('/api/settings')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((snap: SettingsSnapshot | null) => {
+    const ctrl = new AbortController();
+    transport
+      .getSettings(ctrl.signal)
+      .then((snap: SettingsSnapshot) => {
         if (!active || !snap) return;
         setSettingsSnapshot(snap);
         if (snap.settings.workspace) {
@@ -535,20 +596,15 @@ export default function App() {
       });
     return () => {
       active = false;
+      ctrl.abort();
     };
-  }, [handleCheckUpdates, applyWorkspacePrefsToUi]);
+  }, [handleCheckUpdates, applyWorkspacePrefsToUi, transport]);
 
   const handleSaveSettings = useCallback(async (next: SpectraCraftSettings): Promise<boolean> => {
     setSettingsSaving(true);
     setSettingsError(null);
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      });
-      const data = (await res.json()) as SettingsSnapshot & { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Failed to persist settings');
+      const data = await transport.saveSettings(next);
       setSettingsSnapshot(data);
       if (data.settings.workspace) {
         applyWorkspacePrefsToUi(data.settings.workspace);
@@ -562,15 +618,13 @@ export default function App() {
     } finally {
       setSettingsSaving(false);
     }
-  }, [applyWorkspacePrefsToUi]);
+  }, [applyWorkspacePrefsToUi, transport]);
 
   const handleResetSettings = useCallback(async (): Promise<boolean> => {
     setSettingsSaving(true);
     setSettingsError(null);
     try {
-      const res = await fetch('/api/settings/reset', { method: 'POST' });
-      const data = (await res.json()) as SettingsSnapshot & { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Failed to reset settings');
+      const data = await transport.resetSettings();
       setSettingsSnapshot(data);
       if (data.settings.workspace) {
         applyWorkspacePrefsToUi(data.settings.workspace);
@@ -584,7 +638,7 @@ export default function App() {
     } finally {
       setSettingsSaving(false);
     }
-  }, [applyWorkspacePrefsToUi]);
+  }, [applyWorkspacePrefsToUi, transport]);
 
   const handleUpdateAction = useCallback(
     async (action: UpdateActionKind) => {
@@ -593,18 +647,14 @@ export default function App() {
       setUpdateActionBusy(action);
       setUpdateActionResult(null);
       try {
-        const res = await fetch('/api/updates/action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, noticeId, target }),
-        });
-        const result = (await res.json()) as UpdateActionResult & { error?: string };
-        if (!res.ok) throw new Error(result.error || `Update action '${action}' failed`);
+        const result = await transport.runUpdateAction({ action, noticeId, target });
         setUpdateActionResult(result);
         // Refresh persisted settings snapshot so last_action / pending_staged_target / dismissed_notice_id stay synced
-        const snapRes = await fetch('/api/settings');
-        if (snapRes.ok) {
-          setSettingsSnapshot((await snapRes.json()) as SettingsSnapshot);
+        try {
+          const snap = await transport.getSettings();
+          setSettingsSnapshot(snap);
+        } catch {
+          // Non-fatal refresh error
         }
         if (action === 'download_later' || action === 'update_now') {
           void handleCheckUpdates(false);
@@ -630,7 +680,7 @@ export default function App() {
         setUpdateActionBusy(null);
       }
     },
-    [updateReport, handleCheckUpdates],
+    [updateReport, handleCheckUpdates, transport],
   );
 
   // Fetch authoritative Rust acoustic analysis (Sabine RT60, axial modes, 343 m/s delay, polar trig, 3:1 guidance)
@@ -638,15 +688,12 @@ export default function App() {
   const rigAcousticKey = useMemo(() => computeAcousticFingerprint(rig), [rig]);
   useEffect(() => {
     const seq = ++analysisSeqRef.current;
+    const ctrl = new AbortController();
     const timer = window.setTimeout(() => {
-      fetch('/api/studio/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rigConfig: toRustCaptureConfig(rig) }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data: RustAcousticAnalysis | null) => {
-          if (data && analysisSeqRef.current === seq) {
+      transport
+        .analyzeStudioRig(toRustCaptureConfig(rig), ctrl.signal)
+        .then((data: RustAcousticAnalysis) => {
+          if (analysisSeqRef.current === seq) {
             setRustAcousticAnalysis(data);
           }
         })
@@ -654,9 +701,12 @@ export default function App() {
           // Local exact mirror remains active without blocking UI
         });
     }, 35);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rigAcousticKey]);
+  }, [rigAcousticKey, transport]);
 
   // Fetch authoritative Rust ReferenceShape whenever session, selected source (for out-of-range check),
   // or edited cues run changes. Display-only actions never re-fetch or alter the shape.
@@ -666,19 +716,24 @@ export default function App() {
       return;
     }
     const seq = ++shapeSeqRef.current;
-    const qs = new URLSearchParams({ sourceIndex: String(rig.sourceIndex) });
-    if (activeCuesRunId) qs.set('cuesRunId', activeCuesRunId);
-    fetch(`/api/sessions/${encodeURIComponent(session.id)}/reference-shape?${qs.toString()}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: ReferenceShape | null) => {
-        if (data && shapeSeqRef.current === seq) {
+    const epoch = sessionEpochRef.current.current();
+    const sessionId = session.id;
+    const ctrl = new AbortController();
+    transport
+      .getReferenceShape(sessionId, rig.sourceIndex, activeCuesRunId, ctrl.signal)
+      .then((data: ReferenceShape) => {
+        if (
+          shapeSeqRef.current === seq &&
+          sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
           setReferenceShape(data);
         }
       })
       .catch(() => {
-        // Keep previous shape on transient failure
+        // Keep previous shape on transient failure or abort
       });
-  }, [session, rig.sourceIndex, activeCuesRunId]);
+    return () => ctrl.abort();
+  }, [session, rig.sourceIndex, activeCuesRunId, transport]);
 
   const structuredPrompt = useMemo(() => {
     if (!session || !referenceShape || !catalogs) return null;
@@ -708,16 +763,42 @@ export default function App() {
     pipelineStages,
   ]);
 
+  const decodeMediaHandle = useCallback(
+    async (urlOrHandle: string, signal?: AbortSignal): Promise<AudioBuffer> => {
+      if (transport.mode === 'tauri') {
+        const arr = await transport.readMediaBytes(urlOrHandle, signal);
+        if (signal?.aborted) throw new DOMException('Media decode aborted', 'AbortError');
+        const ctx = ensureAudioContext();
+        return ctx.decodeAudioData(arr.slice(0));
+      }
+      return decodeWavUrl(urlOrHandle, signal);
+    },
+    [transport, ensureAudioContext, decodeWavUrl],
+  );
+
   const hydrateSessionAudio = useCallback(
-    async (payload: SessionPayload, dryUrlOverride?: string, cuesUrlOverride?: string) => {
+    async (
+      payload: SessionPayload,
+      opts?: {
+        dryUrlOverride?: string;
+        cuesUrlOverride?: string;
+        expectedEpoch?: number;
+        signal?: AbortSignal;
+      },
+    ) => {
+      const epoch = opts?.expectedEpoch ?? sessionEpochRef.current.current();
+      const signal = opts?.signal ?? beginOpController('hydrate');
       setLoadingAudio(true);
       try {
-        const dryUrl = dryUrlOverride ?? payload.files.dryWav;
-        const cuesUrl = cuesUrlOverride ?? payload.files.cuesJson;
+        const dryUrl = opts?.dryUrlOverride ?? payload.files.dryWav;
+        const cuesUrl = opts?.cuesUrlOverride ?? payload.files.cuesJson;
         const [orig, regen] = await Promise.all([
-          decodeWavUrl(payload.files.sourceWav),
-          decodeWavUrl(dryUrl),
+          decodeMediaHandle(payload.files.sourceWav, signal),
+          decodeMediaHandle(dryUrl, signal),
         ]);
+        if (!sessionEpochRef.current.isCurrent(epoch, payload.id) || signal.aborted) {
+          return null;
+        }
         const ctx = ensureAudioContext();
         const diff = buildDifferenceBuffer(ctx, orig, regen);
         setOrigBuffer(orig);
@@ -727,14 +808,18 @@ export default function App() {
         setActiveCuesUrl(cuesUrl);
         return { orig, regen, diff };
       } finally {
-        setLoadingAudio(false);
+        if (sessionEpochRef.current.isCurrent(epoch, payload.id)) {
+          setLoadingAudio(false);
+        }
       }
     },
-    [decodeWavUrl, ensureAudioContext],
+    [decodeMediaHandle, ensureAudioContext, beginOpController],
   );
 
   const loadSessionPayload = useCallback(
     async (payload: SessionPayload) => {
+      abortAllPending();
+      const epoch = sessionEpochRef.current.beginSession(payload.id);
       resetTransport('regenerated');
       stopLayerMix();
       if (regionLoopSourceRef.current) {
@@ -746,11 +831,30 @@ export default function App() {
         }
         regionLoopSourceRef.current = null;
       }
+      const baseDryRev: DryRevision = {
+        id: nextDryRevisionId('stage1'),
+        parentRevisionId: null,
+        stage1BaseId: '',
+        drySha256: payload.verification.dry_candidate_sha256,
+        dryWavUrl: payload.files.dryWav,
+        cuesJsonUrl: payload.files.cuesJson,
+        cuesRunId: null,
+        isStage2Edit: false,
+        label: 'Stage 1 Initial Dry Synthesis',
+        createdAt: new Date().toISOString(),
+      };
+      baseDryRev.stage1BaseId = baseDryRev.id;
+
       setRegionPreviewPlaying(false);
       setOrigBuffer(null);
       setRegenBuffer(null);
       setDiffBuffer(null);
       setSession(payload);
+      setAudioHistory(initAudioHistoryWithBase(baseDryRev));
+      setDryApproval(null);
+      setPipelineProvenance(null);
+      setReportProvenance(null);
+      setEditTransactions([]);
       setViewStartS(0);
       setViewEndS(payload.verification.duration_s);
       setSelection(null);
@@ -775,56 +879,55 @@ export default function App() {
       setTechnicalReportId(null);
       setReportError(null);
       setReportLastExport(null);
-      await hydrateSessionAudio(payload);
+      const hydrated = await hydrateSessionAudio(payload, { expectedEpoch: epoch });
+      if (!hydrated || !sessionEpochRef.current.isCurrent(epoch, payload.id)) return;
       setStatusTone('ready');
       setStatusText(`Loaded ${payload.label} · Stage 1 dry take ready (post-dry stages OFF by default)`);
     },
-    [hydrateSessionAudio, resetTransport, stopLayerMix],
+    [abortAllPending, hydrateSessionAudio, resetTransport, stopLayerMix],
   );
 
   const handleOpenReference = useCallback(async () => {
     setOpenMenu(null);
+    const signal = beginOpController('session-open');
     setStatusTone('busy');
     setStatusText('Running Rust guitar-verify on 48 kHz Slow Solo reference…');
     try {
-      const res = await fetch('/api/sessions/default');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load reference session');
-      await loadSessionPayload(data as SessionPayload);
+      const data = await transport.loadReferenceSession(signal);
+      if (signal.aborted) return;
+      await loadSessionPayload(data);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setStatusTone('error');
       setStatusText(err instanceof Error ? err.message : String(err));
     }
-  }, [loadSessionPayload]);
+  }, [beginOpController, transport, loadSessionPayload]);
 
   const handleUploadWavFile = useCallback(
     async (file: File) => {
       setOpenMenu(null);
+      const signal = beginOpController('session-open');
       setStatusTone('busy');
       setStatusText(`Analyzing ${file.name} in Rust engine…`);
       try {
         const buf = await file.arrayBuffer();
-        const res = await fetch('/api/sessions/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'X-Filename': file.name,
-          },
-          body: buf,
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Rust analysis rejected this WAV');
-        await loadSessionPayload(data as SessionPayload);
+        if (signal.aborted) return;
+        const data = await transport.uploadWav(file.name, buf, signal);
+        if (signal.aborted) return;
+        await loadSessionPayload(data);
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         setStatusTone('error');
         setStatusText(err instanceof Error ? err.message : String(err));
       }
     },
-    [loadSessionPayload],
+    [beginOpController, transport, loadSessionPayload],
   );
 
   const handleCloseFile = useCallback(() => {
     setOpenMenu(null);
+    abortAllPending();
+    sessionEpochRef.current.closeSession();
     resetTransport('regenerated');
     stopLayerMix();
     if (regionLoopSourceRef.current) {
@@ -838,6 +941,11 @@ export default function App() {
     }
     setRegionPreviewPlaying(false);
     setSession(null);
+    setAudioHistory(createInitialAudioHistory());
+    setDryApproval(null);
+    setPipelineProvenance(null);
+    setReportProvenance(null);
+    setEditTransactions([]);
     setOrigBuffer(null);
     setRegenBuffer(null);
     setCapturedBuffer(null);
@@ -864,7 +972,210 @@ export default function App() {
     setReportModalOpen(false);
     setStatusTone('idle');
     setStatusText('Ready');
-  }, [resetTransport, stopLayerMix]);
+  }, [abortAllPending, resetTransport, stopLayerMix]);
+
+  /** Activate a historical dry revision (Undo / Redo / Stage 2 Bypass) atomically (Audit H7). */
+  const activateDryRevision = useCallback(
+    async (rev: DryRevision, reason: string) => {
+      if (!session) return;
+      const epoch = sessionEpochRef.current.current();
+      const sessionId = session.id;
+      const signal = beginOpController('dry-revision-swap');
+      try {
+        const hydrated = await hydrateSessionAudio(session, {
+          dryUrlOverride: rev.dryWavUrl,
+          cuesUrlOverride: rev.cuesJsonUrl,
+          expectedEpoch: epoch,
+          signal,
+        });
+        if (!hydrated || !sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+        setActiveCuesRunId(rev.cuesRunId);
+        setDryChecklist(emptyDryListeningChecklist());
+        setDryApproval(null);
+        setCapturedBuffer(null);
+        setPipelineResult(null);
+        setPipelineProvenance(null);
+        setTakeMode((m) => (m === 'captured' ? 'regenerated' : m));
+        if (isPlayingRef.current) {
+          if (takeModeRef.current === 'regenerated' || takeModeRef.current === 'captured') {
+            crossfadePlaybackToBuffer(hydrated.regen);
+          } else if (takeModeRef.current === 'difference') {
+            crossfadePlaybackToBuffer(hydrated.diff);
+          }
+        }
+        setStatusTone('ready');
+        setStatusText(`${reason} · Active dry SHA ${rev.drySha256.slice(0, 10)} · Dry listening check reset to 0/5`);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setStatusTone('error');
+        setStatusText(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [
+      session,
+      beginOpController,
+      hydrateSessionAudio,
+      setTakeMode,
+      isPlayingRef,
+      takeModeRef,
+      crossfadePlaybackToBuffer,
+    ],
+  );
+
+  const handleUndoAudioEdit = useCallback(() => {
+    setOpenMenu(null);
+    if (!session || audioHistory.past.length === 0) return;
+    const nextState = undoAudioRevision(audioHistory);
+    setAudioHistory(nextState);
+    const rev = getEffectiveDryRevision(nextState);
+    if (rev) {
+      void activateDryRevision(rev, `Undid dry audio edit (${rev.label})`);
+    }
+  }, [session, audioHistory, activateDryRevision]);
+
+  const handleRedoAudioEdit = useCallback(() => {
+    setOpenMenu(null);
+    if (!session || audioHistory.future.length === 0) return;
+    const nextState = redoAudioRevision(audioHistory);
+    setAudioHistory(nextState);
+    const rev = getEffectiveDryRevision(nextState);
+    if (rev) {
+      void activateDryRevision(rev, `Redid dry audio edit (${rev.label})`);
+    }
+  }, [session, audioHistory, activateDryRevision]);
+
+  const handleToggleStage2Bypass = useCallback(() => {
+    setOpenMenu(null);
+    if (!session || !audioHistory.stage1Base) return;
+    const nextState = setStage2Bypass(audioHistory, !audioHistory.stage2Bypassed);
+    setAudioHistory(nextState);
+    const rev = getEffectiveDryRevision(nextState);
+    if (rev) {
+      void activateDryRevision(
+        rev,
+        nextState.stage2Bypassed
+          ? 'Stage 2 bypassed (auditioning Stage 1 base dry take)'
+          : 'Stage 2 dry edits restored',
+      );
+    }
+  }, [session, audioHistory, activateDryRevision]);
+
+  // Browser Project v2 Save & Load (Audit H6)
+  const handleSaveProjectFile = useCallback(() => {
+    setOpenMenu(null);
+    if (!session || !audioHistory.stage1Base || !activeDryRevision) return;
+    const project: ProjectFileV2 = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      kind: 'spectracraft_project',
+      savedAt: new Date().toISOString(),
+      source: {
+        sessionId: session.id,
+        label: session.label,
+        sourceSha256: session.verification.source_sha256,
+        sampleRate: session.verification.sample_rate,
+        durationS: session.verification.duration_s,
+      },
+      cues: {
+        cuesSha256: session.verification.cues_sha256 ?? null,
+        activeCuesRunId: activeDryRevision.cuesRunId,
+        patches: cuePatches,
+      },
+      stage1: {
+        sourceIndex: rig.sourceIndex,
+        voicing,
+        baseDryRevision: audioHistory.stage1Base,
+      },
+      stage2: {
+        activeDryRevision,
+        stage2Bypassed: audioHistory.stage2Bypassed,
+        regions: regionHistory.regions,
+        editTransactions,
+      },
+      postDry: {
+        rig,
+        pipelineStages,
+        lastPipelineRunId: pipelineResult?.runId ?? null,
+        lastPipelineSha256: pipelineResult?.wav_sha256 ?? null,
+      },
+      approval: isApprovalValidForRevision(dryApproval, activeDryRevision) ? dryApproval : null,
+    };
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeBase = session.label.replace(/\.wav$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '_') || 'session';
+    a.href = url;
+    a.download = `${safeBase}.spectracraft.json`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatusTone('ready');
+    setStatusText(`Saved Project v2 (${safeBase}.spectracraft.json)`);
+  }, [
+    session,
+    audioHistory,
+    activeDryRevision,
+    cuePatches,
+    rig,
+    voicing,
+    regionHistory.regions,
+    editTransactions,
+    pipelineStages,
+    pipelineResult,
+    dryApproval,
+  ]);
+
+  const handleLoadProjectFile = useCallback(
+    async (file: File) => {
+      setOpenMenu(null);
+      try {
+        const text = await file.text();
+        const parsed = parseAndValidateProjectFile(
+          text,
+          session?.verification.source_sha256 ?? null,
+        );
+        if (!parsed.ok) {
+          setStatusTone('error');
+          setStatusText(parsed.error);
+          return;
+        }
+        if (parsed.kind === 'settings_preset_v1') {
+          if (parsed.rig) {
+            setRigHistory((prev) => pushHistory(prev, { ...prev.present, ...parsed.rig }));
+          }
+          setStatusTone('ready');
+          setStatusText(parsed.warnings[0]);
+          return;
+        }
+        if (parsed.assetMatch === 'source_mismatch') {
+          setStatusTone('error');
+          setStatusText(parsed.warnings[0]);
+          return;
+        }
+        const proj = parsed.project;
+        setRigHistory((prev) => pushHistory(prev, proj.postDry.rig));
+        setVoicing(proj.stage1.voicing);
+        setPipelineStages(proj.postDry.pipelineStages);
+        setCuePatches(proj.cues.patches ?? {});
+        setRegionHistory({
+          regions: proj.stage2.regions ?? [],
+          selectedId: proj.stage2.regions?.[0]?.id ?? null,
+          past: [],
+          future: [],
+          gestureBaseline: null,
+        });
+        setEditTransactions(proj.stage2.editTransactions ?? []);
+        setDryChecklist(emptyDryListeningChecklist());
+        setDryApproval(null);
+        setStatusTone('ready');
+        setStatusText(
+          `Restored Project v2 (${proj.source.label} · ${proj.stage2.regions.length} dry region(s) · re-verify dry audio before Stage 4 variants)`,
+        );
+      } catch (err) {
+        setStatusTone('error');
+        setStatusText(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [session],
+  );
 
   const handleUpdateRig = useCallback((next: StudioRigState, commit = true) => {
     setRigHistory((prev) =>
@@ -884,6 +1195,9 @@ export default function App() {
 
   const handleAnalyzeLayers = useCallback(async () => {
     if (!session) return;
+    const epoch = sessionEpochRef.current.current();
+    const sessionId = session.id;
+    const signal = beginOpController('layers');
     stopLayerMix();
     setLayersBusy(true);
     setStatusTone('busy');
@@ -891,19 +1205,19 @@ export default function App() {
     try {
       const startS = selection ? selection[0] : Math.min(20, Math.max(0, durationS - 7));
       const endS = selection ? selection[1] : Math.min(durationS, startS + 7);
-      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/layers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startS, endS, faintRidges: true }),
-      });
-      const data = (await res.json()) as LayerSessionResult & { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Layer analysis failed');
-      setLayerSession(data);
-      const decodedEntries = await Promise.all(
-        data.stems.map(async (st) => [st.id, await decodeWavUrl(st.url)] as const),
+      const data = await transport.analyzeLayers(
+        sessionId,
+        { startS, endS, faintRidges: true },
+        signal,
       );
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+      const decodedEntries = await Promise.all(
+        data.stems.map(async (st) => [st.id, await decodeMediaHandle(st.url, signal)] as const),
+      );
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       const nextMap: Partial<Record<LayerChannel['id'], AudioBuffer>> = {};
       for (const [id, buf] of decodedEntries) nextMap[id] = buf;
+      setLayerSession(data);
       setLayerBuffers(nextMap);
       setLayerChannels((prev) =>
         prev.map((ch) => {
@@ -914,52 +1228,94 @@ export default function App() {
       setStatusTone('ready');
       setStatusText(`Inspection layers ready (${data.startS.toFixed(2)}–${data.endS.toFixed(2)} s)`);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       setStatusTone('error');
       setStatusText(err instanceof Error ? err.message : String(err));
     } finally {
-      setLayersBusy(false);
+      if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+        setLayersBusy(false);
+      }
     }
-  }, [session, selection, durationS, decodeWavUrl, stopLayerMix]);
+  }, [session, selection, durationS, beginOpController, transport, decodeMediaHandle, stopLayerMix]);
 
   const handleRenderEditedCues = useCallback(async () => {
     if (!session) return;
+    const epoch = sessionEpochRef.current.current();
+    const sessionId = session.id;
+    const prevRev = activeDryRevision;
+    const signal = beginOpController('render-cues');
     setCuesBusy(true);
     setStatusTone('busy');
     setStatusText('Running source-free Rust render-dry-guitar…');
     try {
       const patches = Object.values(cuePatches);
-      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/render-cues`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patches }),
+      const data = await transport.renderEditedCues(sessionId, patches, signal);
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+      const hydrated = await hydrateSessionAudio(session, {
+        dryUrlOverride: data.dryWavUrl,
+        cuesUrlOverride: data.cuesJsonUrl,
+        expectedEpoch: epoch,
+        signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Cue render failed');
+      if (!hydrated || !sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+
+      const nextRevId = nextDryRevisionId('cues');
+      const nextSha = data.drySha256 ?? `${data.runId}`;
+      setAudioHistory((prev) =>
+        pushStage1DryRevision(prev, {
+          id: nextRevId,
+          drySha256: nextSha,
+          dryWavUrl: data.dryWavUrl,
+          cuesJsonUrl: data.cuesJsonUrl,
+          cuesRunId: data.runId,
+          label: `Stage 1 Cue Edit (${patches.length} patch${patches.length === 1 ? '' : 'es'})`,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+      if (prevRev) {
+        setEditTransactions((prev) => [
+          ...prev,
+          {
+            id: nextDryRevisionId('tx'),
+            kind: 'cue_render',
+            beforeDryRevisionId: prevRev.id,
+            beforeDrySha256: prevRev.drySha256,
+            afterDryRevisionId: nextRevId,
+            afterDrySha256: nextSha,
+            cuesRunId: data.runId,
+            summary: `Cue render (${patches.length} patches)`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
       setActiveCuesRunId(data.runId);
-      // Contract invariant: new dry render resets human listening gate to 0/5 and invalidates old capture
       setDryChecklist(emptyDryListeningChecklist());
+      setDryApproval(null);
       setCapturedBuffer(null);
       setPipelineResult(null);
+      setPipelineProvenance(null);
       setRegionEditResult(null);
       setTakeMode((m) => (m === 'captured' ? 'regenerated' : m));
       setLivePreview(false);
-      await hydrateSessionAudio(session, data.dryWavUrl, data.cuesJsonUrl);
       setStatusTone('ready');
       setStatusText(`New source-free dry WAV synthesized (run ${data.runId}) · Dry listening check reset to 0/5`);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       setStatusTone('error');
       setStatusText(err instanceof Error ? err.message : String(err));
     } finally {
-      setCuesBusy(false);
+      if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+        setCuesBusy(false);
+      }
     }
-  }, [session, cuePatches, hydrateSessionAudio]);
+  }, [session, activeDryRevision, cuePatches, beginOpController, transport, hydrateSessionAudio, setTakeMode]);
 
   const handleReloadCatalogs = useCallback(async () => {
     setReloadingCatalogs(true);
     try {
-      const res = await fetch('/api/studio/reload-catalogs', { method: 'POST' });
-      const data = (await res.json()) as RustStudioCatalogs & { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Catalog reload failed');
+      const data = await transport.reloadStudioCatalogs();
       setCatalogs(data);
       setStatusTone('ready');
       setStatusText(
@@ -971,10 +1327,14 @@ export default function App() {
     } finally {
       setReloadingCatalogs(false);
     }
-  }, []);
+  }, [transport]);
 
   const handleRegenerateDryWithSource = useCallback(async () => {
     if (!session) return;
+    const epoch = sessionEpochRef.current.current();
+    const sessionId = session.id;
+    const prevRev = activeDryRevision;
+    const signal = beginOpController('source-regen');
     setSourceRegenBusy(true);
     const chosen = catalogs?.sources[rig.sourceIndex];
     setStatusTone('busy');
@@ -982,26 +1342,61 @@ export default function App() {
       `Stage 1 · Regenerating dry take in Rust (${chosen ? chosen.name : `Source #${rig.sourceIndex}`} · ${voicing.characterTarget}/${voicing.straightenMode})…`,
     );
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/regenerate-source`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await transport.regenerateDryWithSource(
+        sessionId,
+        {
           sourceIndex: rig.sourceIndex,
           cuesRunId: activeCuesRunId,
           voicing: serializeVoicingForRust(voicing),
-        }),
+        },
+        signal,
+      );
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+      const hydrated = await hydrateSessionAudio(session, {
+        dryUrlOverride: data.dryWavUrl,
+        cuesUrlOverride: data.cuesJsonUrl,
+        expectedEpoch: epoch,
+        signal,
       });
-      const data = (await res.json()) as RustSourceRegenResult & { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Source-informed dry regeneration failed');
+      if (!hydrated || !sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+
+      const nextRevId = nextDryRevisionId('src');
+      setAudioHistory((prev) =>
+        pushStage1DryRevision(prev, {
+          id: nextRevId,
+          drySha256: data.drySha256,
+          dryWavUrl: data.dryWavUrl,
+          cuesJsonUrl: data.cuesJsonUrl,
+          cuesRunId: data.runId,
+          label: `Stage 1 Source (${data.sourceName})`,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+      if (prevRev) {
+        setEditTransactions((prev) => [
+          ...prev,
+          {
+            id: nextDryRevisionId('tx'),
+            kind: 'source_regen',
+            beforeDryRevisionId: prevRev.id,
+            beforeDrySha256: prevRev.drySha256,
+            afterDryRevisionId: nextRevId,
+            afterDrySha256: data.drySha256,
+            cuesRunId: data.runId,
+            summary: `Source regeneration: ${data.sourceName}`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
       setActiveCuesRunId(data.runId);
       setSourceRegenResult(data);
-      // Fresh Stage 1 dry take invalidates cached downstream output until re-rendered
       setDryChecklist(emptyDryListeningChecklist());
+      setDryApproval(null);
       setCapturedBuffer(null);
       setPipelineResult(null);
+      setPipelineProvenance(null);
       setRegionEditResult(null);
       setTakeMode((m) => (m === 'captured' ? 'regenerated' : m));
-      const hydrated = await hydrateSessionAudio(session, data.dryWavUrl, data.cuesJsonUrl);
       if (isPlayingRef.current) {
         if (takeModeRef.current === 'regenerated' || takeModeRef.current === 'captured') {
           crossfadePlaybackToBuffer(hydrated.regen);
@@ -1014,17 +1409,24 @@ export default function App() {
         `Stage 1 dry take cached (${data.sourceName} · centroid ${Math.round(data.spectral.spectral_centroid_hz)} Hz · SHA ${data.drySha256.slice(0, 10)})`,
       );
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       setStatusTone('error');
       setStatusText(err instanceof Error ? err.message : String(err));
     } finally {
-      setSourceRegenBusy(false);
+      if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+        setSourceRegenBusy(false);
+      }
     }
   }, [
     session,
+    activeDryRevision,
     catalogs,
     rig.sourceIndex,
     voicing,
     activeCuesRunId,
+    beginOpController,
+    transport,
     hydrateSessionAudio,
     setTakeMode,
     isPlayingRef,
@@ -1078,7 +1480,11 @@ export default function App() {
   const runDryRegionEdit = useCallback(
     async (region: DryRegion, commit: boolean) => {
       if (!session) return;
+      const epoch = sessionEpochRef.current.current();
+      const sessionId = session.id;
+      const prevRev = activeDryRevision;
       const reqId = ++regionEditSeqRef.current;
+      const signal = beginOpController('dry-region-edit');
       setRegionEditBusy(true);
       setStatusTone('busy');
       setStatusText(
@@ -1087,26 +1493,34 @@ export default function App() {
           : `Stage 2 · Previewing localized ${region.action} fix (${region.startS.toFixed(2)}–${region.endS.toFixed(2)} s)…`,
       );
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/dry-region-edit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const data = await transport.dryRegionEdit(
+          sessionId,
+          {
             edit: serializeDryRegionForRust(region),
             sourceIndex: rig.sourceIndex,
             voicing: serializeVoicingForRust(voicing),
             cuesRunId: activeCuesRunId,
             commit,
-          }),
-        });
-        const data = (await res.json()) as DryRegionEditResponse & { error?: string };
-        if (!res.ok) throw new Error(data.error || 'Dry region edit failed');
-        if (reqId !== regionEditSeqRef.current) return;
+          },
+          signal,
+        );
+        if (
+          reqId !== regionEditSeqRef.current ||
+          !sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
+          return;
+        }
 
         const [beforeBuf, afterBuf] = await Promise.all([
-          decodeWavUrl(data.beforeSliceUrl),
-          decodeWavUrl(data.afterSliceUrl),
+          decodeMediaHandle(data.beforeSliceUrl, signal),
+          decodeMediaHandle(data.afterSliceUrl, signal),
         ]);
-        if (reqId !== regionEditSeqRef.current) return;
+        if (
+          reqId !== regionEditSeqRef.current ||
+          !sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
+          return;
+        }
 
         setRegionEditResult(data);
         setRegionBeforeBuf(beforeBuf);
@@ -1117,9 +1531,56 @@ export default function App() {
         }
 
         if (commit) {
+          const hydrated = await hydrateSessionAudio(session, {
+            dryUrlOverride: data.editedWavUrl,
+            cuesUrlOverride: activeCuesUrl ?? undefined,
+            expectedEpoch: epoch,
+            signal,
+          });
+          if (
+            !hydrated ||
+            reqId !== regionEditSeqRef.current ||
+            !sessionEpochRef.current.isCurrent(epoch, sessionId)
+          ) {
+            return;
+          }
+
+          const nextRevId = nextDryRevisionId('s2');
+          setAudioHistory((prev) =>
+            pushStage2DryEditRevision(prev, {
+              id: nextRevId,
+              drySha256: data.edited_sha256,
+              dryWavUrl: data.editedWavUrl,
+              cuesJsonUrl: activeCuesUrl ?? session.files.cuesJson,
+              cuesRunId: data.runId,
+              label: `Stage 2 Edit (${data.effective_action} ${region.startS.toFixed(2)}–${region.endS.toFixed(2)}s)`,
+              editSummary: `${data.effective_action} (${data.affected_notes} note(s))`,
+              createdAt: new Date().toISOString(),
+            }),
+          );
+          if (prevRev) {
+            setEditTransactions((prev) => [
+              ...prev,
+              {
+                id: nextDryRevisionId('tx'),
+                kind: 'dry_region_edit',
+                beforeDryRevisionId: prevRev.id,
+                beforeDrySha256: prevRev.drySha256,
+                afterDryRevisionId: nextRevId,
+                afterDrySha256: data.edited_sha256,
+                cuesRunId: data.runId,
+                summary: `${data.effective_action} ${region.startS.toFixed(2)}–${region.endS.toFixed(2)}s`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+          }
+          // Accepted dry edit automatically invalidates prior dry approval and downstream renders (Audit H5)
           setActiveCuesRunId(data.runId);
+          setDryChecklist(emptyDryListeningChecklist());
+          setDryApproval(null);
           setCapturedBuffer(null);
           setPipelineResult(null);
+          setPipelineProvenance(null);
           setRegionHistory((prev) =>
             updateDryRegion(
               prev,
@@ -1132,13 +1593,12 @@ export default function App() {
               false,
             ),
           );
-          const hydrated = await hydrateSessionAudio(session, data.editedWavUrl, activeCuesUrl ?? undefined);
           if (isPlayingRef.current && takeModeRef.current === 'regenerated') {
             crossfadePlaybackToBuffer(hydrated.regen);
           }
           setStatusTone('ready');
           setStatusText(
-            `Stage 2 · Applied localized ${data.effective_action} (${data.affected_notes} note(s) · outside bit-identical: ${data.outside_bit_identical ? 'YES' : 'NO'} · SHA ${data.edited_sha256.slice(0, 10)})`,
+            `Stage 2 · Applied localized ${data.effective_action} (${data.affected_notes} note(s) · outside bit-identical: ${data.outside_bit_identical ? 'YES' : 'NO'} · SHA ${data.edited_sha256.slice(0, 10)}) · Dry approval reset`,
           );
         } else {
           setStatusTone('ready');
@@ -1147,22 +1607,34 @@ export default function App() {
           );
         }
       } catch (err) {
-        if (reqId !== regionEditSeqRef.current) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (
+          reqId !== regionEditSeqRef.current ||
+          !sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
+          return;
+        }
         setStatusTone('error');
         setStatusText(err instanceof Error ? err.message : String(err));
       } finally {
-        if (reqId === regionEditSeqRef.current) {
+        if (
+          reqId === regionEditSeqRef.current &&
+          sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
           setRegionEditBusy(false);
         }
       }
     },
     [
       session,
+      activeDryRevision,
       rig.sourceIndex,
       voicing,
       activeCuesRunId,
       activeCuesUrl,
-      decodeWavUrl,
+      beginOpController,
+      transport,
+      decodeMediaHandle,
       durationS,
       hydrateSessionAudio,
       isPlayingRef,
@@ -1264,59 +1736,67 @@ export default function App() {
   const handleRunGapRepair = useCallback(
     async (startS: number, gapMs: number) => {
       if (!session) return;
+      const epoch = sessionEpochRef.current.current();
+      const sessionId = session.id;
+      const signal = beginOpController('gap-repair');
       setRepairBusy(true);
       setStatusTone('busy');
       setStatusText('Running Rust repair-gap…');
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/repair-gap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ startS, gapMs }),
-        });
-        const data = (await res.json()) as GapRepairResult & { error?: string };
-        if (!res.ok) throw new Error(data.error || 'Gap repair failed');
+        const data = await transport.repairGap(sessionId, { startS, gapMs }, signal);
+        if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
         setRepairResult(data);
         setStatusTone('ready');
         setStatusText(`Local gap repair: ${data.status}`);
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
         setStatusTone('error');
         setStatusText(err instanceof Error ? err.message : String(err));
       } finally {
-        setRepairBusy(false);
+        if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+          setRepairBusy(false);
+        }
       }
     },
-    [session],
+    [session, transport, beginOpController],
   );
 
   const handleRenderVariants = useCallback(async () => {
     if (!session || !dryReviewApproved) return;
     const sel = buildVariantSelection(selectedVariants);
     if (!sel) return;
+    const epoch = sessionEpochRef.current.current();
+    const sessionId = session.id;
+    const signal = beginOpController('variants');
     setVariantsBusy(true);
     setStatusTone('busy');
     setStatusText('Rendering post-processing variants in Rust…');
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/variants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await transport.renderVariants(
+        sessionId,
+        {
           selection: sel,
           cuesRunId: activeCuesRunId,
           dryApproved: dryReviewApproved,
-        }),
-      });
-      const data = (await res.json()) as VariantsManifest & { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Variant render failed');
+        },
+        signal,
+      );
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       setVariants(data);
       setStatusTone('ready');
       setStatusText(`Rendered ${data.exports.length} variant export(s)`);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       setStatusTone('error');
       setStatusText(err instanceof Error ? err.message : String(err));
     } finally {
-      setVariantsBusy(false);
+      if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+        setVariantsBusy(false);
+      }
     }
-  }, [session, dryReviewApproved, selectedVariants, activeCuesRunId]);
+  }, [session, dryReviewApproved, selectedVariants, activeCuesRunId, beginOpController, transport]);
 
   const runPipelineRender = useCallback(
     async (
@@ -1325,7 +1805,11 @@ export default function App() {
       opts: { crossfadeIfPlaying: boolean; autoSwitch: boolean },
     ) => {
       if (!session) return;
+      const epoch = sessionEpochRef.current.current();
+      const sessionId = session.id;
+      const targetDryRev = activeDryRevision;
       const reqId = ++captureSeqRef.current;
+      const signal = beginOpController('pipeline-render');
       setPipelineBusy(true);
       setStatusTone('busy');
       const activeNames = [
@@ -1341,24 +1825,39 @@ export default function App() {
           : `Rendering post-dry pipeline in Rust (${activeNames.join(' → ')})…`,
       );
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/pipeline-render`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const data = await transport.pipelineRender(
+          sessionId,
+          {
             micEnabled: targetStages.micEnabled,
             roomEnabled: targetStages.roomEnabled,
             rigConfig: toRustCaptureConfig(targetRig),
             pluginSlot: serializePluginSlotForRust(targetStages.pluginSlot),
             cuesRunId: activeCuesRunId,
-          }),
-        });
-        const data = (await res.json()) as PipelineRenderResponse & { error?: string };
-        if (!res.ok) throw new Error(data.error || 'Rust pipeline render failed');
-        const decoded = await decodeWavUrl(data.wavUrl);
-        if (reqId !== captureSeqRef.current) return;
+          },
+          signal,
+        );
+        if (
+          reqId !== captureSeqRef.current ||
+          !sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
+          return;
+        }
+        const decoded = await decodeMediaHandle(data.wavUrl, signal);
+        if (
+          reqId !== captureSeqRef.current ||
+          !sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
+          return;
+        }
 
         setCapturedBuffer(decoded);
         setPipelineResult(data);
+        if (targetDryRev) {
+          setPipelineProvenance({
+            parentDryRevisionId: targetDryRev.id,
+            parentDrySha256: targetDryRev.drySha256,
+          });
+        }
         if (opts.autoSwitch) {
           setTakeMode('captured');
           if (isPlayingRef.current) {
@@ -1379,23 +1878,43 @@ export default function App() {
             : `Pipeline ready (${activeNames.join(' + ')} · SHA ${data.wav_sha256.slice(0, 10)})`,
         );
       } catch (err) {
-        if (reqId !== captureSeqRef.current) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (
+          reqId !== captureSeqRef.current ||
+          !sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
+          return;
+        }
         setStatusTone('error');
         setStatusText(err instanceof Error ? err.message : String(err));
       } finally {
-        if (reqId === captureSeqRef.current) {
+        if (
+          reqId === captureSeqRef.current &&
+          sessionEpochRef.current.isCurrent(epoch, sessionId)
+        ) {
           setPipelineBusy(false);
         }
       }
     },
-    [session, activeCuesRunId, decodeWavUrl, crossfadePlaybackToBuffer, setTakeMode, isPlayingRef, takeModeRef],
+    [
+      session,
+      activeDryRevision,
+      activeCuesRunId,
+      beginOpController,
+      transport,
+      decodeMediaHandle,
+      crossfadePlaybackToBuffer,
+      setTakeMode,
+      isPlayingRef,
+      takeModeRef,
+    ],
   );
 
   const handleRerenderCapture = useCallback(() => {
     void runPipelineRender(rig, pipelineStages, { crossfadeIfPlaying: true, autoSwitch: true });
   }, [rig, pipelineStages, runPipelineRender]);
 
-  // Debounced Live Preview: watches ONLY acoustic fingerprint + pipeline stage toggles (never display-only changes)
+  // Debounced Live Preview: watches acoustic fingerprint + pipeline stage toggles + active dry revision (Audit H5)
   const acousticFingerprint = useMemo(() => computeAcousticFingerprint(rig), [rig]);
   const pipelineStageKey = useMemo(
     () =>
@@ -1405,34 +1924,45 @@ export default function App() {
   const lastPreviewFpRef = useRef<string>('');
   useEffect(() => {
     if (!livePreview || !session) return;
-    const combinedKey = `${acousticFingerprint}|${pipelineStageKey}`;
-    if (lastPreviewFpRef.current === combinedKey && pipelineResult) return;
+    const combinedKey = `${activeDryRevision?.id ?? 'none'}|${acousticFingerprint}|${pipelineStageKey}`;
+    if (lastPreviewFpRef.current === combinedKey && pipelineResult && !isPipelineStale) return;
     const timer = window.setTimeout(() => {
       lastPreviewFpRef.current = combinedKey;
       void runPipelineRender(rig, pipelineStages, { crossfadeIfPlaying: true, autoSwitch: false });
     }, 320);
     return () => window.clearTimeout(timer);
-    // Intentionally keyed on acousticFingerprint + pipelineStageKey so display-only rig edits never trigger renders
+    // Intentionally keyed on activeDryRevision + acousticFingerprint + pipelineStageKey
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [acousticFingerprint, pipelineStageKey, livePreview, session]);
+  }, [activeDryRevision?.id, acousticFingerprint, pipelineStageKey, livePreview, session]);
 
-  const handleToggleDryCriterion = useCallback((key: DryCriterionKey) => {
-    setDryChecklist((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      const passed = countPassedDryCriteria(next);
-      if (isDryListeningPassed(next)) {
-        setStatusTone('ready');
-        setStatusText('Dry listening gate passed (5/5) · Stage 4 post-processing unlocked');
-      } else {
-        setLivePreview(false);
-        setStatusTone('ready');
-        setStatusText(
-          `Dry listening check (${passed}/5) · Pass all 5 criteria before Stage 4 post-processing`,
-        );
-      }
-      return next;
-    });
-  }, []);
+  const handleToggleDryCriterion = useCallback(
+    (key: DryCriterionKey) => {
+      setDryChecklist((prev) => {
+        const next = { ...prev, [key]: !prev[key] };
+        const passed = countPassedDryCriteria(next);
+        if (isDryListeningPassed(next) && activeDryRevision) {
+          setDryApproval({
+            approvedDryRevisionId: activeDryRevision.id,
+            approvedDrySha256: activeDryRevision.drySha256,
+            approvedAt: new Date().toISOString(),
+          });
+          setStatusTone('ready');
+          setStatusText(
+            `Dry listening gate passed (5/5) for revision ${activeDryRevision.drySha256.slice(0, 10)} · Stage 4 post-processing unlocked`,
+          );
+        } else {
+          setDryApproval(null);
+          setLivePreview(false);
+          setStatusTone('ready');
+          setStatusText(
+            `Dry listening check (${passed}/5) · Pass all 5 criteria before Stage 4 post-processing`,
+          );
+        }
+        return next;
+      });
+    },
+    [activeDryRevision],
+  );
 
   const openDryReviewDock = useCallback(() => {
     openRightPanelTab('diagnostics');
@@ -1441,6 +1971,10 @@ export default function App() {
 
   const handleGenerateTechnicalReport = useCallback(async () => {
     if (!session) return;
+    const epoch = sessionEpochRef.current.current();
+    const sessionId = session.id;
+    const targetDryRev = activeDryRevision;
+    const signal = beginOpController('technical-report');
     setOpenMenu(null);
     setReportBusy(true);
     setReportError(null);
@@ -1454,27 +1988,31 @@ export default function App() {
       if (pipelineStages.pluginSlot.enabled && pipelineStages.pluginSlot.pluginId !== 'none') {
         stages.push(`Stage 5 Plugin (${pipelineStages.pluginSlot.pluginId})`);
       }
-      const res = await fetch(
-        `/api/sessions/${encodeURIComponent(session.id)}/technical-report`,
+      const data = await transport.generateTechnicalReport(
+        sessionId,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            cuesRunId: activeCuesRunId ?? '',
-            pipelineRunId: pipelineResult?.runId ?? '',
-            title: `${session.label} — Blind Before/After Technical Report`,
-            pipelineLabel: pipelineResult
+          cuesRunId: activeCuesRunId ?? '',
+          pipelineRunId: !isPipelineStale ? (pipelineResult?.runId ?? '') : '',
+          title: `${session.label} — Blind Before/After Technical Report`,
+          pipelineLabel:
+            pipelineResult && !isPipelineStale
               ? stages.join(' -> ')
               : 'Stage 1 Dry Regeneration (post-dry stages bypassed)',
-          }),
         },
+        signal,
       );
-      const data = (await res.json()) as Partial<TechnicalReportApiResponse> & { error?: string };
-      if (!res.ok || !data.report || !data.reportId) {
-        throw new Error(data.error || 'Blind technical report generation failed.');
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
+      if (!data.report || !data.reportId) {
+        throw new Error('Blind technical report generation failed.');
       }
       setTechnicalReport(data.report);
       setTechnicalReportId(data.reportId);
+      if (targetDryRev) {
+        setReportProvenance({
+          parentDryRevisionId: targetDryRev.id,
+          parentDrySha256: targetDryRev.drySha256,
+        });
+      }
       if (settingsSnapshot?.settings.report.auto_open_viewer ?? true) {
         openRightPanelTab('report');
       }
@@ -1483,38 +2021,49 @@ export default function App() {
         `Blind technical report ready (${data.report.comparison.deltas.length} significant deltas)`,
       );
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return;
       const msg = err instanceof Error ? err.message : String(err);
       setReportError(msg);
       openRightPanelTab('report');
       setStatusTone('error');
       setStatusText(msg);
     } finally {
-      setReportBusy(false);
+      if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+        setReportBusy(false);
+      }
     }
-  }, [session, activeCuesRunId, pipelineStages, pipelineResult, settingsSnapshot, openRightPanelTab]);
+  }, [
+    session,
+    activeDryRevision,
+    activeCuesRunId,
+    pipelineStages,
+    pipelineResult,
+    isPipelineStale,
+    settingsSnapshot,
+    beginOpController,
+    transport,
+    openRightPanelTab,
+  ]);
 
   const handleExportTechnicalReport = useCallback(
     async (format: 'pdf' | 'markdown' | 'docx'): Promise<ReportExportResponse | null> => {
       if (!session || !technicalReportId) return null;
+      const epoch = sessionEpochRef.current.current();
+      const sessionId = session.id;
+      const signal = beginOpController('technical-report-export');
       setReportExportBusy(format);
       setReportError(null);
       try {
-        const res = await fetch(
-          `/api/sessions/${encodeURIComponent(session.id)}/technical-report/export`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              reportId: technicalReportId,
-              format,
-            }),
-          },
+        const exportResp = await transport.exportTechnicalReport(
+          sessionId,
+          { reportId: technicalReportId, format },
+          signal,
         );
-        const data = (await res.json()) as Partial<ReportExportResponse> & { error?: string };
-        if (!res.ok || !data.url || !data.receipt) {
-          throw new Error(data.error || `Failed to export report as ${format.toUpperCase()}.`);
+        if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return null;
+        if (!exportResp.url || !exportResp.receipt) {
+          throw new Error(`Failed to export report as ${format.toUpperCase()}.`);
         }
-        const exportResp = data as ReportExportResponse;
         setReportLastExport(exportResp);
         setStatusTone('ready');
         setStatusText(
@@ -1522,16 +2071,20 @@ export default function App() {
         );
         return exportResp;
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return null;
+        if (!sessionEpochRef.current.isCurrent(epoch, sessionId)) return null;
         const msg = err instanceof Error ? err.message : String(err);
         setReportError(msg);
         setStatusTone('error');
         setStatusText(msg);
         return null;
       } finally {
-        setReportExportBusy(null);
+        if (sessionEpochRef.current.isCurrent(epoch, sessionId)) {
+          setReportExportBusy(null);
+        }
       }
     },
-    [session, technicalReportId],
+    [session, technicalReportId, beginOpController, transport],
   );
 
   const openHelp = useCallback(
@@ -1811,6 +2364,20 @@ export default function App() {
           { kind: 'separator' },
           {
             kind: 'item',
+            id: 'file-save-project',
+            label: 'Save Project (.spectracraft.json)…',
+            disabled: !session,
+            onSelect: handleSaveProjectFile,
+          },
+          {
+            kind: 'item',
+            id: 'file-load-project',
+            label: 'Load Project / Preset (.json)…',
+            onSelect: () => projectInputRef.current?.click(),
+          },
+          { kind: 'separator' },
+          {
+            kind: 'item',
             id: 'file-export',
             label: 'Export Dry WAV / Cues / Variants…',
             shortcut: 'Ctrl+E',
@@ -1829,7 +2396,7 @@ export default function App() {
           {
             kind: 'item',
             id: 'file-open-report',
-            label: 'Open Technical Report Tab',
+            label: isReportStale ? 'Open Technical Report Tab (Stale)' : 'Open Technical Report Tab',
             disabled: !session && !technicalReport,
             onSelect: () => {
               openRightPanelTab('report');
@@ -1861,7 +2428,7 @@ export default function App() {
           {
             kind: 'item',
             id: 'edit-undo',
-            label: 'Undo',
+            label: 'Undo Rig Change',
             shortcut: 'Ctrl+Z',
             disabled: rigHistory.past.length === 0,
             onSelect: handleUndo,
@@ -1869,10 +2436,33 @@ export default function App() {
           {
             kind: 'item',
             id: 'edit-redo',
-            label: 'Redo',
+            label: 'Redo Rig Change',
             shortcut: 'Ctrl+Shift+Z',
             disabled: rigHistory.future.length === 0,
             onSelect: handleRedo,
+          },
+          { kind: 'separator' },
+          {
+            kind: 'item',
+            id: 'edit-undo-audio',
+            label: `Undo Dry Audio Edit (${audioHistory.past.length})`,
+            disabled: !session || audioHistory.past.length === 0,
+            onSelect: handleUndoAudioEdit,
+          },
+          {
+            kind: 'item',
+            id: 'edit-redo-audio',
+            label: `Redo Dry Audio Edit (${audioHistory.future.length})`,
+            disabled: !session || audioHistory.future.length === 0,
+            onSelect: handleRedoAudioEdit,
+          },
+          {
+            kind: 'item',
+            id: 'edit-bypass-stage2',
+            label: 'Bypass Stage 2 Dry Edits (Audition Stage 1 Base)',
+            disabled: !session || !audioHistory.stage1Base || !audioHistory.present?.isStage2Edit,
+            checked: audioHistory.stage2Bypassed,
+            onSelect: handleToggleStage2Bypass,
           },
           { kind: 'separator' },
           {
@@ -2874,6 +3464,17 @@ export default function App() {
           e.target.value = '';
         }}
       />
+      <input
+        ref={projectInputRef}
+        type="file"
+        accept=".json,.spectracraft.json,application/json"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleLoadProjectFile(f);
+          e.target.value = '';
+        }}
+      />
 
       {/* Single Clean ArtCraft Top Menu Bar — no extra toolbar or update banner below */}
       <MenuBar
@@ -3352,10 +3953,21 @@ export default function App() {
                       setViewEndS(ne);
                     }}
                     onCursorMove={setCursor}
+                    isDrySurfaceEditable={!viewedLayerChannel && takeMode === 'regenerated'}
+                    onSwitchToDrySurface={() => {
+                      setViewedLayerId(null);
+                      handleSwitchTake('regenerated');
+                    }}
                     dryRegions={regionHistory.regions}
                     selectedRegionId={regionHistory.selectedId}
                     onSelectDryRegion={(id) => setRegionHistory((prev) => selectDryRegion(prev, id))}
                     onCreateDryRegion={handleCreateDryRegion}
+                    onBeginDryRegionGesture={() =>
+                      setRegionHistory((prev) => beginRegionGesture(prev))
+                    }
+                    onCancelDryRegionGesture={() =>
+                      setRegionHistory((prev) => cancelRegionGesture(prev))
+                    }
                     onTransformDryRegion={(id, next, commit) =>
                       setRegionHistory((prev) => updateDryRegion(prev, id, next, durationS, commit))
                     }
@@ -3517,7 +4129,14 @@ export default function App() {
         activeDryUrl={activeDryUrl}
         activeCuesUrl={activeCuesUrl}
         activeCuesRunId={activeCuesRunId}
+        activeDryRevisionId={activeDryRevision?.id ?? null}
+        activeDrySha256={activeDryRevision?.drySha256 ?? null}
         pipelineResult={pipelineResult}
+        pipelineStale={isPipelineStale}
+        onExportDawBundle={(req) => {
+          if (!session) throw new Error('No active session');
+          return transport.exportDawInterchange(session.id, req);
+        }}
       />
 
       <ResynthesisLineageModal

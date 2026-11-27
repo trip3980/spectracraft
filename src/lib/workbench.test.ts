@@ -231,3 +231,86 @@ test('sanitizeClientErrorMessage strips internal paths and stack lines', async (
   assert.ok(!cleaned.includes('at Object.openSync'));
   assert.ok(cleaned.includes('<path>'));
 });
+
+function makeTestPcmWav(rate: number, bitsPerSample: 8 | 16 | 24 | 32, samples: number[]): Uint8Array {
+  const bytesPerSample = bitsPerSample / 8;
+  const dataBytes = samples.length * bytesPerSample;
+  const buf = new Uint8Array(44 + dataBytes);
+  const view = new DataView(buf.buffer);
+  const ascii = (off: number, s: string) => {
+    for (let i = 0; i < s.length; i++) buf[off + i] = s.charCodeAt(i);
+  };
+  ascii(0, 'RIFF');
+  view.setUint32(4, 36 + dataBytes, true);
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, bitsPerSample, true);
+  ascii(36, 'data');
+  view.setUint32(40, dataBytes, true);
+
+  for (let i = 0; i < samples.length; i++) {
+    const x = Math.max(-1, Math.min(0.999999, samples[i]));
+    const off = 44 + i * bytesPerSample;
+    if (bitsPerSample === 8) {
+      buf[off] = Math.max(0, Math.min(255, Math.round(x * 128 + 128)));
+    } else if (bitsPerSample === 16) {
+      view.setInt16(off, Math.round(x * 32767), true);
+    } else if (bitsPerSample === 24) {
+      let v = Math.round(x * 8388607);
+      if (v < 0) v += 0x1000000;
+      buf[off] = v & 0xff;
+      buf[off + 1] = (v >> 8) & 0xff;
+      buf[off + 2] = (v >> 16) & 0xff;
+    } else {
+      view.setInt32(off, Math.round(x * 2147483647), true);
+    }
+  }
+  return buf;
+}
+
+test('M7: sliceMonoWavBuffer accepts full 8-96 kHz x PCM 8/16/24/32 + float32 WAV matrix without resampling', () => {
+  const rates = [8000, 16000, 44100, 48000, 96000];
+  const pcmDepths: Array<8 | 16 | 24 | 32> = [8, 16, 24, 32];
+
+  for (const rate of rates) {
+    const n = Math.round(rate * 0.5);
+    const tone = Array.from({ length: n }, (_, i) => 0.5 * Math.sin((2 * Math.PI * 440 * i) / rate));
+
+    // IEEE Float 32-bit
+    const f32Wav = makeTestFloatWav(rate, tone);
+    const f32Sliced = sliceMonoWavBuffer(f32Wav, 0.1, 0.4);
+    assert.equal(f32Sliced.sampleRate, rate);
+    assert.equal(f32Sliced.samples, Math.round(0.3 * rate));
+    assert.equal(f32Sliced.sourceEncoding, 'ieee_float_32');
+    assert.equal(f32Sliced.convertedToFloat32, false);
+
+    // PCM 8 / 16 / 24 / 32-bit
+    for (const bits of pcmDepths) {
+      const pcmWav = makeTestPcmWav(rate, bits, tone);
+      const sliced = sliceMonoWavBuffer(pcmWav, 0.1, 0.4);
+      assert.equal(sliced.sampleRate, rate, `sample rate must not be resampled for ${rate}Hz ${bits}-bit`);
+      assert.equal(sliced.samples, Math.round(0.3 * rate));
+      assert.equal(sliced.sourceEncoding, `pcm_${bits}`);
+      assert.equal(sliced.sourceBitsPerSample, bits);
+      assert.equal(sliced.convertedToFloat32, true);
+
+      // Verify decoded sample matches original tone within quantization tolerance
+      const outView = new DataView(sliced.buffer.buffer, sliced.buffer.byteOffset, sliced.buffer.byteLength);
+      const checkIdx = Math.floor(sliced.samples / 2);
+      const decoded = outView.getFloat32(44 + checkIdx * 4, true);
+      const expected = tone[Math.floor(0.1 * rate) + checkIdx];
+      const tol = bits === 8 ? 0.02 : 0.001;
+      assert.ok(
+        Math.abs(decoded - expected) < tol,
+        `${rate}Hz ${bits}-bit sample mismatch: got ${decoded}, expected ${expected}`,
+      );
+    }
+  }
+});
+

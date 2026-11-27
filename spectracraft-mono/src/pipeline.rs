@@ -284,7 +284,9 @@ pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 /// Execute Stages 3 (Optional Mic), 4 (Optional Room), and 5 (Optional Plugin Slot)
-/// sequentially from the cached dry take. Any bypassed stage is a strict bit-identical pass-through.
+/// sequentially from the cached dry take using canonical physical capture timing and
+/// dynamic un-truncated room decay tails (for offline rendering and export).
+/// Any bypassed stage is a strict bit-identical pass-through.
 pub fn run_post_dry_pipeline(
     dry_samples: &[f32],
     rate: u32,
@@ -292,6 +294,54 @@ pub fn run_post_dry_pipeline(
     sources: &[SourceEntry],
     mics: &[MicEntry],
     surfaces: &[SurfaceEntry],
+) -> PipelineRenderOutput {
+    run_post_dry_pipeline_with_options(
+        dry_samples,
+        rate,
+        cfg,
+        sources,
+        mics,
+        surfaces,
+        crate::studio_catalog::Timing::Physical,
+        true,
+    )
+}
+
+/// Fixed-block auditioning/monitoring variant preserving exact `dry_samples.len()` and optional
+/// sample-aligned direct timing so real-time audio callbacks never perform offline tail allocation.
+pub fn run_post_dry_pipeline_fixed_block(
+    dry_samples: &[f32],
+    rate: u32,
+    cfg: &PostDryPipelineConfig,
+    sources: &[SourceEntry],
+    mics: &[MicEntry],
+    surfaces: &[SurfaceEntry],
+) -> PipelineRenderOutput {
+    run_post_dry_pipeline_with_options(
+        dry_samples,
+        rate,
+        cfg,
+        sources,
+        mics,
+        surfaces,
+        crate::studio_catalog::Timing::AlignDirect,
+        false,
+    )
+}
+
+/// Execute Stages 3–5 with explicit timing mode (`Timing::Physical` vs `Timing::AlignDirect`)
+/// and explicit tail preservation (`preserve_tail = true` for offline export, `false` for
+/// fixed-block monitoring).
+#[allow(clippy::too_many_arguments)]
+pub fn run_post_dry_pipeline_with_options(
+    dry_samples: &[f32],
+    rate: u32,
+    cfg: &PostDryPipelineConfig,
+    sources: &[SourceEntry],
+    mics: &[MicEntry],
+    surfaces: &[SurfaceEntry],
+    timing: crate::studio_catalog::Timing,
+    preserve_tail: bool,
 ) -> PipelineRenderOutput {
     let dry_sha256 = hash_f32_samples(dry_samples);
     let mut bypassed_stages = Vec::new();
@@ -326,40 +376,54 @@ pub fn run_post_dry_pipeline(
             .filter(|(_, m)| m.enabled)
             .map(|(i, _)| i)
             .collect();
-        let indices = if active_indices.is_empty() {
-            vec![effective_rig
-                .selected_mic
-                .min(effective_rig.mics.len().saturating_sub(1))]
-        } else {
-            active_indices
-        };
 
-        let mut mixed = vec![0.0_f32; dry_samples.len()];
-        let inv_count = 1.0 / (indices.len() as f32);
-        let eff_preamp = if cfg.mic_enabled {
-            cfg.preamp_drive
+        // Explicit all-disabled behavior: if every microphone slot is disabled (or empty),
+        // produce clean silence rather than silently re-enabling an unmuted slot.
+        if active_indices.is_empty() {
+            bypassed_stages.push("all_mics_disabled".into());
+            vec![0.0_f32; dry_samples.len()]
         } else {
-            0.0
-        };
-        for &mi in &indices {
-            let mut slot_rig = effective_rig.clone();
-            slot_rig.selected_mic = mi;
-            let rendered = capture::render_studio_rig_with_options(
-                dry_samples,
-                rate,
-                &slot_rig,
-                sources,
-                mics,
-                surfaces,
-                cfg.mic_enabled,
-                eff_preamp,
-                false,
-            );
-            for (dst, &v) in mixed.iter_mut().zip(rendered.iter()) {
-                *dst += v * inv_count;
+            let eff_preamp = if cfg.mic_enabled {
+                cfg.preamp_drive
+            } else {
+                0.0
+            };
+            let mut per_mic_outputs: Vec<Vec<f32>> = Vec::with_capacity(active_indices.len());
+            for &mi in &active_indices {
+                let mut slot_rig = effective_rig.clone();
+                slot_rig.selected_mic = mi;
+                let rendered = capture::render_studio_rig_with_timing(
+                    dry_samples,
+                    rate,
+                    &slot_rig,
+                    sources,
+                    mics,
+                    surfaces,
+                    timing,
+                    cfg.mic_enabled,
+                    eff_preamp,
+                    preserve_tail,
+                );
+                per_mic_outputs.push(rendered);
             }
+            let out_len = if preserve_tail {
+                per_mic_outputs
+                    .iter()
+                    .map(Vec::len)
+                    .max()
+                    .unwrap_or(dry_samples.len())
+            } else {
+                dry_samples.len()
+            };
+            let mut mixed = vec![0.0_f32; out_len];
+            let inv_count = 1.0 / (per_mic_outputs.len() as f32);
+            for rendered in per_mic_outputs {
+                for (dst, &v) in mixed.iter_mut().zip(rendered.iter()) {
+                    *dst += v * inv_count;
+                }
+            }
+            mixed
         }
-        mixed
     };
 
     // Stage 5: Optional Plugin / Processing Slot (before final output)
@@ -450,17 +514,16 @@ pub fn run_post_dry_pipeline_stereo(
             .filter(|(_, m)| m.enabled)
             .map(|(i, _)| i)
             .collect();
-        let indices = if active_indices.is_empty() {
-            vec![effective_rig
-                .selected_mic
-                .min(effective_rig.mics.len().saturating_sub(1))]
-        } else {
-            active_indices
-        };
 
-        if indices.len() == 1 {
+        if active_indices.is_empty() {
+            bypassed_stages.push("all_mics_disabled".into());
+            capture::StereoAudio {
+                left: vec![0.0_f32; dry_samples.len()],
+                right: vec![0.0_f32; dry_samples.len()],
+            }
+        } else if active_indices.len() == 1 {
             let mut slot_rig = effective_rig.clone();
-            slot_rig.selected_mic = indices[0];
+            slot_rig.selected_mic = active_indices[0];
             capture::render_studio_rig_stereo_with_options(
                 dry_samples,
                 rate,
@@ -473,6 +536,7 @@ pub fn run_post_dry_pipeline_stereo(
                 preserve_tail,
             )
         } else {
+            let indices = active_indices;
             // Multi-mic stereo array: preserve physical inter-mic arrival delay relative to
             // closest mic and apply constant-power stereo panning from each mic's lateral X offset.
             let c = crate::studio_catalog::speed_of_sound_celsius(f64::from(
@@ -967,7 +1031,7 @@ impl AudioPipelineEngine {
         }
         let mut cfg = self.post_dry.clone();
         cfg.rig.clamp_all();
-        let rendered = run_post_dry_pipeline(
+        let rendered = run_post_dry_pipeline_fixed_block(
             dry_in,
             self.sample_rate,
             &cfg,
@@ -1031,12 +1095,12 @@ impl AudioPipelineEngine {
         if state.version != 1 {
             return Err(format!("Unsupported engine state version {}", state.version).into());
         }
+        state.post_dry.rig.validate(
+            self.sources.len(),
+            self.mics.len(),
+            self.surfaces.len(),
+        )?;
         state.post_dry.rig.clamp_all();
-        state.post_dry.rig.source_index = state
-            .post_dry
-            .rig
-            .source_index
-            .min(self.sources.len().saturating_sub(1));
         self.voicing = state.voicing;
         self.post_dry = state.post_dry;
         Ok(())
@@ -1158,10 +1222,10 @@ mod tests {
             "room-only render with bypassed mic must not depend on mic catalog EQ"
         );
 
-        // Also match direct 6-band omni room rendering with zero mic EQ applied.
+        // Also match direct 6-band omni room rendering with canonical physical timing & tail.
         let mut omni_rig = cfg_a.rig.clone();
         omni_rig.mics[0].pattern_override = Some(Pattern::Omni);
-        let expected = capture::render_studio_rig_with_mic_eq(
+        let expected = capture::render_studio_rig_with_tail(
             &dry, rate, &omni_rig, &sources, &mics, &surfaces, false,
         );
         assert_eq!(out_a.samples, expected);
@@ -1344,4 +1408,151 @@ mod tests {
         assert_eq!(reader.spec().bits_per_sample, 24);
         let _ = std::fs::remove_file(&tmp);
     }
+
+    #[test]
+    fn malformed_rig_is_rejected_and_all_disabled_mics_output_explicit_silence() {
+        let sources = source_catalog();
+        let mics = mic_catalog();
+        let surfaces = surface_catalog();
+        let rate = 48_000_u32;
+
+        // Empty mics vector must fail validation instead of panicking on mics[0]
+        let mut empty_rig = StudioRig::default();
+        empty_rig.mics.clear();
+        assert!(empty_rig.validate(sources.len(), mics.len(), surfaces.len()).is_err());
+        assert!(empty_rig.try_active_mic().is_none());
+
+        // > 4 mics must fail validation
+        let mut too_many = StudioRig::default();
+        for _ in 0..StudioRig::MAX_MIC_SLOTS {
+            too_many.mics.push(crate::studio_catalog::MicSlot::sm7_baseline());
+        }
+        assert!(too_many.validate(sources.len(), mics.len(), surfaces.len()).is_err());
+
+        // Out-of-bounds selected_mic and non-finite coordinates must fail validation
+        let mut bad_sel = StudioRig::default();
+        bad_sel.selected_mic = 9;
+        assert!(bad_sel.validate(sources.len(), mics.len(), surfaces.len()).is_err());
+        let mut nan_rig = StudioRig::default();
+        nan_rig.mics[0].offset_m[1] = f32::NAN;
+        assert!(nan_rig.validate(sources.len(), mics.len(), surfaces.len()).is_err());
+
+        // AudioPipelineEngine::apply_state rejects malformed rigs cleanly
+        let mut engine = AudioPipelineEngine::new(rate).expect("engine init");
+        let mut bad_snap = engine.snapshot_state();
+        bad_snap.post_dry.rig = empty_rig;
+        assert!(engine.apply_state(bad_snap).is_err());
+
+        // All-disabled mic slots output explicit silence (never silently activating selected_mic)
+        let dry: Vec<f32> = (0..2400)
+            .map(|i| (0.4 * (TAU * 440.0 * i as f64 / f64::from(rate)).sin()) as f32)
+            .collect();
+        let mut cfg = PostDryPipelineConfig::default();
+        cfg.mic_enabled = true;
+        cfg.room_enabled = true;
+        cfg.rig.mics[0].enabled = false;
+        let out = run_post_dry_pipeline(&dry, rate, &cfg, &sources, &mics, &surfaces);
+        assert!(out.samples.iter().all(|&s| s == 0.0));
+        assert!(out.summary.bypassed_stages.iter().any(|s| s == "all_mics_disabled"));
+    }
+
+    #[test]
+    fn physical_distance_produces_inverse_square_attenuation_and_propagation_delay() {
+        let sources = source_catalog();
+        let mics = mic_catalog();
+        let surfaces = surface_catalog();
+        let rate = 48_000_u32;
+
+        // Clean short pulse at sample 240 so arrival delay and peak amplitude are directly measurable
+        let mut dry = vec![0.0_f32; 4800];
+        for i in 0..64 {
+            let w = 0.5 * (1.0 - (TAU * i as f64 / 64.0).cos());
+            dry[240 + i] = (0.5 * w * (TAU * 1000.0 * i as f64 / f64::from(rate)).sin()) as f32;
+        }
+
+        // Room-only neutral omni capture at 0.40 m vs 0.80 m (Direct preset: pure direct path, no mic EQ)
+        let mut near_cfg = PostDryPipelineConfig::default();
+        near_cfg.mic_enabled = false;
+        near_cfg.room_enabled = true;
+        near_cfg.rig.apply_preset(RoomPreset::Direct);
+        near_cfg.rig.mics[0].pattern_override = Some(Pattern::Omni);
+        near_cfg.rig.mics[0].offset_m = [0.0, 0.40, 0.0];
+
+        let mut far_cfg = near_cfg.clone();
+        far_cfg.rig.mics[0].offset_m = [0.0, 0.80, 0.0];
+
+        let near_out = run_post_dry_pipeline(&dry, rate, &near_cfg, &sources, &mics, &surfaces);
+        let far_out = run_post_dry_pipeline(&dry, rate, &far_cfg, &sources, &mics, &surfaces);
+
+        let energy = |xs: &[f32]| xs.iter().map(|&v| f64::from(v) * f64::from(v)).sum::<f64>();
+        let ratio_db = 10.0 * (energy(&far_out.samples) / energy(&near_out.samples).max(1e-24)).log10();
+        assert!(
+            (ratio_db - (-6.02)).abs() <= 0.35,
+            "doubling physical distance (0.4 m -> 0.8 m) must attenuate by ~6.02 dB, got {ratio_db:.2} dB"
+        );
+
+        let peak_idx = |xs: &[f32]| {
+            xs.iter()
+                .enumerate()
+                .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+                .map(|(i, _)| i)
+                .unwrap_or(0)
+        };
+        let delta_samples = peak_idx(&far_out.samples) as isize - peak_idx(&near_out.samples) as isize;
+        let expected_samples = (0.40
+            / crate::studio_catalog::speed_of_sound_celsius(f64::from(near_cfg.rig.temperature_c))
+            * f64::from(rate))
+        .round() as isize;
+        assert!(
+            (delta_samples - expected_samples).abs() <= 2,
+            "expected physical arrival shift ~{expected_samples} samples, got {delta_samples}"
+        );
+    }
+
+    #[test]
+    fn reverberant_concrete_room_capture_preserves_decay_tail_past_legacy_cap() {
+        let sources = source_catalog();
+        let mics = mic_catalog();
+        let surfaces = surface_catalog();
+        let rate = 48_000_u32;
+
+        // Short 0.25 s musical burst into a highly reflective concrete room
+        let n = (rate as usize) / 4;
+        let dry: Vec<f32> = (0..n)
+            .map(|i| {
+                let t = i as f64 / f64::from(rate);
+                let env = (-t * 12.0).exp();
+                (env * 0.6 * (TAU * 440.0 * t).sin()) as f32
+            })
+            .collect();
+
+        let mut cfg = PostDryPipelineConfig::default();
+        cfg.mic_enabled = false;
+        cfg.room_enabled = true;
+        let concrete_idx = surfaces
+            .iter()
+            .position(|s| s.id.contains("concrete") || s.id.contains("plaster"))
+            .unwrap_or(0);
+        cfg.rig.surface_faces = [concrete_idx; 6];
+        cfg.rig.dimensions_m = [8.0, 10.0, 5.0];
+
+        let out = run_post_dry_pipeline(&dry, rate, &cfg, &sources, &mics, &surfaces);
+        let tail_seconds = (out.samples.len().saturating_sub(dry.len())) as f64 / f64::from(rate);
+        assert!(
+            tail_seconds > 1.5,
+            "reflective concrete room export must preserve decay tail beyond legacy 1.25 s cap, got {tail_seconds:.2} s"
+        );
+        let tail_start = dry.len() + (rate as usize);
+        let late_tail_rms = if tail_start < out.samples.len() {
+            let slice = &out.samples[tail_start..];
+            (slice.iter().map(|&v| f64::from(v) * f64::from(v)).sum::<f64>() / slice.len() as f64).sqrt()
+        } else {
+            0.0
+        };
+        assert!(
+            late_tail_rms > 1e-5,
+            "preserved late tail after +1.0 s should carry real room decay energy, got {late_tail_rms:.2e}"
+        );
+    }
 }
+

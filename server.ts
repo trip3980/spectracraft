@@ -3,10 +3,23 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pipeline as streamPipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import express from 'express';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
+import {
+  acquireSessionsWorkspace,
+  ArtifactLeaseManager,
+  checkMaintenanceAuth,
+  checkRemoteAccessAuth,
+  decodeUploadDisplayName,
+  isAllowedMutationOrigin,
+  mapExpressErrorToJson,
+  measureDirectoryUsage,
+  resolveBindHost,
+  resolveStrictRunArtifact,
+} from './src/lib/serverSecurity.ts';
 import {
   ALL_VARIANTS,
   countUncertainOverlaps,
@@ -54,7 +67,7 @@ const DEFAULT_VERIFY_DIR =
   process.env.SPECTRACRAFT_VERIFY_DIR ?? path.join(TMP_ROOT, 'slow-solo-verify-48k-exact');
 const DEFAULT_VARIANTS_DIR =
   process.env.SPECTRACRAFT_VARIANTS_DIR ?? path.join(TMP_ROOT, 'slow-solo-variants-48k-exact');
-const SESSIONS_ROOT =
+const BASE_SESSIONS_ROOT =
   process.env.SPECTRACRAFT_SESSIONS_DIR ?? path.join(TMP_ROOT, 'spectracraft-sessions');
 const EMPTY_RETIRED_DIR = path.join(TMP_ROOT, 'spectracraft-empty-retired');
 
@@ -69,6 +82,22 @@ function ensurePrivateDir(dir: string): void {
   }
 }
 
+ensurePrivateDir(BASE_SESSIONS_ROOT);
+ensurePrivateDir(EMPTY_RETIRED_DIR);
+
+// Audit H10: Acquire exclusive ownership lock before any destructive cleanup.
+// If another live server already owns BASE_SESSIONS_ROOT, isolate under a per-PID directory
+// and perform zero destructive cleanup on the active server's workspace.
+const workspaceLease = acquireSessionsWorkspace(BASE_SESSIONS_ROOT);
+const SESSIONS_ROOT = workspaceLease.sessionsRoot;
+ensurePrivateDir(SESSIONS_ROOT);
+
+for (const sig of ['SIGINT', 'SIGTERM', 'exit'] as const) {
+  process.on(sig, () => {
+    workspaceLease.release();
+  });
+}
+
 const TRANSIENT_WORK_SUBDIRS = [
   'cue-render-',
   'source-regen-',
@@ -80,12 +109,14 @@ const TRANSIENT_WORK_SUBDIRS = [
 const SHARED_WORK_SUBDIRS = new Set(['pipeline', 'captures', 'reports', 'daw-interchange']);
 
 function pruneUnreferencedSessionDirs(): void {
+  if (!workspaceLease.canPruneBase) return;
   try {
     for (const entry of fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
+      // Never touch another PID's isolated directory
+      if (entry.name.startsWith('pid-')) continue;
       const fullPath = path.join(SESSIONS_ROOT, entry.name);
       if (!isConfinedPath(SESSIONS_ROOT, fullPath)) continue;
-      // On startup the in-memory sessions Map is empty, so all prior upload-* and scratch dirs are unreferenced.
       if (
         entry.name.startsWith('upload-') ||
         entry.name === 'analysis-tmp' ||
@@ -118,8 +149,6 @@ function pruneUnreferencedSessionDirs(): void {
   }
 }
 
-ensurePrivateDir(SESSIONS_ROOT);
-ensurePrivateDir(EMPTY_RETIRED_DIR);
 pruneUnreferencedSessionDirs();
 
 const HOME_DIR = os.homedir();
@@ -157,6 +186,14 @@ function isConfinedPath(baseDir: string, candidatePath: string): boolean {
   );
 }
 
+interface CachedReportExport {
+  outPath: string;
+  url: string;
+  downloadUrl: string;
+  filename: string;
+  receipt: Record<string, unknown>;
+}
+
 interface SessionRecord {
   id: string;
   label: string;
@@ -169,19 +206,27 @@ interface SessionRecord {
   editedCues: Map<string, string>;
   editedDryWavs: Map<string, string>;
   pipelineOutputs: Map<string, string>;
+  evictedCuesRunIds: Set<string>;
+  evictedPipelineRunIds: Set<string>;
   lastOutputWav: string | null;
   lastOutputLabel: string | null;
   reports: Map<string, string>;
+  reportExports: Map<string, CachedReportExport>;
   auxRuns: Map<string, string>;
 }
 
 const MAX_UPLOADED_SESSIONS = 16;
 const MAX_RUN_ENTRIES_PER_SESSION = 24;
 const MAX_MEDIA_ENTRIES = 512;
+const MAX_SESSION_DISK_BYTES = Number(process.env.SPECTRACRAFT_MAX_SESSION_BYTES || 256 * 1024 * 1024);
+const MAX_TOTAL_SESSIONS_BYTES = Number(
+  process.env.SPECTRACRAFT_MAX_TOTAL_SESSIONS_BYTES || 1024 * 1024 * 1024,
+);
 const SESSION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 const sessions = new Map<string, SessionRecord>();
 const mediaRegistry = new Map<string, { filePath: string; contentType: string; downloadName: string }>();
+const artifactLeases = new ArtifactLeaseManager();
 let cachedStudioCatalogs: unknown | null = null;
 
 function sanitizeClientError(err: unknown, fallback = 'Request failed.'): string {
@@ -235,7 +280,8 @@ function isPathStillReferenced(rec: SessionRecord, targetPath: string): boolean 
 
 function cleanupEvictedRunPath(rec: SessionRecord, evictedKey: string, evictedPath: string): void {
   const target = resolveEvictionTarget(rec, evictedPath);
-  if (!target || isPathStillReferenced(rec, target)) return;
+  // Audit H11: Never delete a file/directory while an active media download or Rust job holds a lease.
+  if (!target || isPathStillReferenced(rec, target) || artifactLeases.hasLeaseUnder(target)) return;
   pruneMediaUnder(target);
   if (fs.existsSync(target)) {
     try {
@@ -244,7 +290,20 @@ function cleanupEvictedRunPath(rec: SessionRecord, evictedKey: string, evictedPa
       // ignore run eviction cleanup failure
     }
   }
-  // When a technical report JSON is evicted, also remove any exported PDF/MD files for that reportId.
+  // When a technical report JSON is evicted, also remove any cached exported PDF/MD files for that reportId.
+  for (const [cacheKey, cached] of rec.reportExports.entries()) {
+    if (cacheKey.startsWith(`${evictedKey}:`) && !artifactLeases.isLeased(cached.outPath)) {
+      rec.reportExports.delete(cacheKey);
+      pruneMediaUnder(cached.outPath);
+      if (fs.existsSync(cached.outPath)) {
+        try {
+          fs.rmSync(cached.outPath, { force: true });
+        } catch {
+          // ignore cached export cleanup failure
+        }
+      }
+    }
+  }
   const reportsDir = path.join(rec.workDir, 'reports');
   if (isConfinedPath(reportsDir, target) && fs.existsSync(reportsDir)) {
     const prefix = `spectracraft-report-${evictedKey}-`;
@@ -252,7 +311,7 @@ function cleanupEvictedRunPath(rec: SessionRecord, evictedKey: string, evictedPa
       for (const name of fs.readdirSync(reportsDir)) {
         if (!name.startsWith(prefix)) continue;
         const exported = path.join(reportsDir, name);
-        if (isConfinedPath(reportsDir, exported)) {
+        if (isConfinedPath(reportsDir, exported) && !artifactLeases.isLeased(exported)) {
           pruneMediaUnder(exported);
           fs.rmSync(exported, { force: true });
         }
@@ -268,6 +327,7 @@ function setBoundedSessionMap(
   map: Map<string, string>,
   key: string,
   value: string,
+  evictedSet?: Set<string>,
 ): void {
   if (map.has(key)) {
     map.delete(key);
@@ -277,9 +337,63 @@ function setBoundedSessionMap(
     const oldestKey = map.keys().next().value;
     if (oldestKey === undefined) break;
     const oldestPath = map.get(oldestKey);
+    if (oldestPath && artifactLeases.hasLeaseUnder(oldestPath)) {
+      // Respect active media/job lease; defer deletion rather than racing an active stream (Audit H11).
+      break;
+    }
     map.delete(oldestKey);
+    if (evictedSet) {
+      evictedSet.add(oldestKey);
+      if (evictedSet.size > 512) {
+        const first = evictedSet.values().next().value;
+        if (first !== undefined) evictedSet.delete(first);
+      }
+    }
     if (oldestPath) {
       cleanupEvictedRunPath(rec, oldestKey, oldestPath);
+    }
+  }
+}
+
+function enforceSessionDiskQuotas(activeRec?: SessionRecord): void {
+  // Audit M8: Bound real disk usage per session and across SESSIONS_ROOT, skipping leased paths.
+  if (activeRec && fs.existsSync(activeRec.workDir)) {
+    let usage = measureDirectoryUsage(activeRec.workDir);
+    if (usage.bytes > MAX_SESSION_DISK_BYTES) {
+      for (const [map, evictSet] of [
+        [activeRec.auxRuns, undefined],
+        [activeRec.pipelineOutputs, activeRec.evictedPipelineRunIds],
+        [activeRec.reports, undefined],
+      ] as Array<[Map<string, string>, Set<string> | undefined]>) {
+        while (usage.bytes > MAX_SESSION_DISK_BYTES && map.size > 2) {
+          const oldestKey = map.keys().next().value;
+          if (!oldestKey) break;
+          const oldestPath = map.get(oldestKey);
+          if (oldestPath && artifactLeases.hasLeaseUnder(oldestPath)) break;
+          map.delete(oldestKey);
+          if (evictSet) evictSet.add(oldestKey);
+          if (oldestPath) cleanupEvictedRunPath(activeRec, oldestKey, oldestPath);
+          usage = measureDirectoryUsage(activeRec.workDir);
+        }
+      }
+    }
+  }
+
+  let total = measureDirectoryUsage(SESSIONS_ROOT);
+  if (total.bytes > MAX_TOTAL_SESSIONS_BYTES) {
+    for (const candidate of [...sessions.values()].filter((s) => !s.isReference && s !== activeRec)) {
+      if (total.bytes <= MAX_TOTAL_SESSIONS_BYTES) break;
+      if (artifactLeases.hasLeaseUnder(candidate.workDir)) continue;
+      sessions.delete(candidate.id);
+      pruneMediaUnder(candidate.workDir);
+      if (isConfinedPath(SESSIONS_ROOT, candidate.workDir) && fs.existsSync(candidate.workDir)) {
+        try {
+          fs.rmSync(candidate.workDir, { recursive: true, force: true });
+        } catch {
+          // ignore quota eviction cleanup failure
+        }
+      }
+      total = measureDirectoryUsage(SESSIONS_ROOT);
     }
   }
 }
@@ -289,6 +403,7 @@ function evictOldUploadedSessions(): void {
   while (uploaded.length > MAX_UPLOADED_SESSIONS) {
     const oldest = uploaded.shift();
     if (!oldest) break;
+    if (artifactLeases.hasLeaseUnder(oldest.workDir)) continue;
     sessions.delete(oldest.id);
     pruneMediaUnder(oldest.workDir);
     if (isConfinedPath(SESSIONS_ROOT, oldest.workDir) && fs.existsSync(oldest.workDir)) {
@@ -299,6 +414,7 @@ function evictOldUploadedSessions(): void {
       }
     }
   }
+  enforceSessionDiskQuotas();
 }
 
 function registerMedia(filePath: string, contentType: string, downloadName?: string): string {
@@ -561,9 +677,12 @@ async function ensureDefaultSession(): Promise<SessionRecord> {
       editedCues: new Map(),
       editedDryWavs: new Map(),
       pipelineOutputs: new Map(),
+      evictedCuesRunIds: new Set(),
+      evictedPipelineRunIds: new Set(),
       lastOutputWav: null,
       lastOutputLabel: null,
       reports: new Map(),
+      reportExports: new Map(),
       auxRuns: new Map(),
     };
     sessions.set(record.id, record);
@@ -668,6 +787,7 @@ async function runRustAudit(): Promise<AuditResult> {
 }
 
 async function startServer() {
+  const bindHost = resolveBindHost();
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -675,33 +795,57 @@ async function startServer() {
     res.setHeader('Referrer-Policy', 'no-referrer');
     next();
   });
-  // Enforce same-origin on mutating API routes whenever an Origin header is supplied (no wildcard CORS).
+
+  // Audit H9: Enforce remote Bearer auth (when remote/non-loopback), maintenance admin auth,
+  // and full-origin validation (ignoring X-Forwarded-Host unless SPECTRACRAFT_TRUST_PROXY=1).
+  const MAINTENANCE_ROUTES = new Set([
+    '/api/audit/run',
+    '/api/studio/reload-catalogs',
+    '/api/updates/action',
+    '/api/settings/reset',
+  ]);
   app.use('/api', (req, res, next) => {
+    const fullApiPath = `/api${req.path}`;
+    if (fullApiPath !== '/api/health') {
+      const authDecision = checkRemoteAccessAuth(
+        req.headers.authorization,
+        bindHost,
+        process.env,
+        req.socket.remoteAddress,
+      );
+      if (!authDecision.allowed) {
+        res.status(authDecision.status).json({
+          error: authDecision.error,
+          code: authDecision.code,
+        });
+        return;
+      }
+    }
+    if (MAINTENANCE_ROUTES.has(fullApiPath)) {
+      const maintDecision = checkMaintenanceAuth(fullApiPath, req.headers.authorization);
+      if (!maintDecision.allowed) {
+        res.status(maintDecision.status).json({
+          error: maintDecision.error,
+          code: maintDecision.code,
+        });
+        return;
+      }
+    }
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
       next();
       return;
     }
-    const originHeader = req.headers.origin;
-    if (typeof originHeader === 'string' && originHeader.length > 0) {
-      try {
-        const originHost = new URL(originHeader).host.toLowerCase();
-        const forwardedHost = String(req.headers['x-forwarded-host'] ?? '')
-          .split(',')[0]
-          .trim()
-          .toLowerCase();
-        const reqHost = String(req.headers.host ?? '').trim().toLowerCase();
-        const normalizeLoopback = (h: string) => h.replace(/^127\.0\.0\.1(?=:|$)/, 'localhost');
-        const allowedHosts = new Set(
-          [reqHost, forwardedHost].filter(Boolean).flatMap((h) => [h, normalizeLoopback(h)]),
-        );
-        if (!allowedHosts.has(originHost) && !allowedHosts.has(normalizeLoopback(originHost))) {
-          res.status(403).json({ error: 'Cross-origin API mutation blocked.' });
-          return;
-        }
-      } catch {
-        res.status(403).json({ error: 'Malformed Origin header.' });
-        return;
-      }
+    const originCheck = isAllowedMutationOrigin(
+      typeof req.headers.origin === 'string' ? req.headers.origin : undefined,
+      typeof req.headers.host === 'string' ? req.headers.host : undefined,
+      typeof req.headers['x-forwarded-host'] === 'string'
+        ? req.headers['x-forwarded-host']
+        : undefined,
+      req.protocol,
+    );
+    if (!originCheck.allowed) {
+      res.status(403).json({ error: originCheck.reason ?? 'Cross-origin API mutation blocked.', code: 'FORBIDDEN_ORIGIN' });
+      return;
     }
     next();
   });
@@ -741,8 +885,8 @@ async function startServer() {
           res.status(400).json({ error: wavCheck.error });
           return;
         }
-        const rawName = String(req.headers['x-filename'] ?? 'uploaded-audio.wav');
-        const safeName = rawName.replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 80) || 'uploaded-audio.wav';
+        // Audit M6: Preserve Unicode display name via X-Filename-Encoded while keeping disk paths opaque UUIDs.
+        const displayName = decodeUploadDisplayName(req.headers);
         const sessionId = `upload-${crypto.randomUUID().slice(0, 10)}`;
         workDir = path.join(SESSIONS_ROOT, sessionId);
         ensurePrivateDir(workDir);
@@ -754,7 +898,7 @@ async function startServer() {
 
         const rec: SessionRecord = {
           id: sessionId,
-          label: safeName,
+          label: displayName,
           isReference: false,
           attribution: null,
           sourceWav,
@@ -764,9 +908,12 @@ async function startServer() {
           editedCues: new Map(),
           editedDryWavs: new Map(),
           pipelineOutputs: new Map(),
+          evictedCuesRunIds: new Set(),
+          evictedPipelineRunIds: new Set(),
           lastOutputWav: null,
           lastOutputLabel: null,
           reports: new Map(),
+          reportExports: new Map(),
           auxRuns: new Map(),
         };
         sessions.set(sessionId, rec);
@@ -843,34 +990,47 @@ async function startServer() {
       const runId = crypto.randomUUID().slice(0, 8);
       const runDir = path.join(rec.workDir, `cue-render-${runId}`);
       ensurePrivateDir(runDir);
-      const editedCuesPath = path.join(runDir, 'cues-edited.json');
-      const dryWavPath = path.join(runDir, 'dry-edited-candidate.wav');
-      fs.writeFileSync(editedCuesPath, JSON.stringify(rawCues), { flag: 'wx', mode: 0o600 });
+      let committed = false;
+      try {
+        const editedCuesPath = path.join(runDir, 'cues-edited.json');
+        const dryWavPath = path.join(runDir, 'dry-edited-candidate.wav');
+        fs.writeFileSync(editedCuesPath, JSON.stringify(rawCues), { flag: 'wx', mode: 0o600 });
 
-      // Purely source-free Rust dry render from edited cue JSON alone.
-      await runRust(SC_BIN, ['render-dry-guitar', editedCuesPath, dryWavPath]);
+        // Purely source-free Rust dry render from edited cue JSON alone.
+        await runRust(SC_BIN, ['render-dry-guitar', editedCuesPath, dryWavPath]);
 
-      const durationS = rawCues.samples / rawCues.rate;
-      const [hashRes, pitchRes] = await Promise.all([
-        runRust(SC_QA, ['hash', dryWavPath]),
-        runRust(SC_QA, ['guitar-pitch-check', rec.sourceWav, dryWavPath, '0', String(durationS)]),
-      ]);
+        const durationS = rawCues.samples / rawCues.rate;
+        const [hashRes, pitchRes] = await Promise.all([
+          runRust(SC_QA, ['hash', dryWavPath]),
+          runRust(SC_QA, ['guitar-pitch-check', rec.sourceWav, dryWavPath, '0', String(durationS)]),
+        ]);
 
-      const pitchReport = JSON.parse(pitchRes.stdout) as IndependentPitchReport;
-      const drySha256 = hashRes.stdout.trim().split(/\s+/)[0] ?? '';
-      setBoundedSessionMap(rec, rec.editedCues, runId, editedCuesPath);
-      setBoundedSessionMap(rec, rec.editedDryWavs, runId, dryWavPath);
-      rec.lastOutputWav = dryWavPath;
-      rec.lastOutputLabel = `Stage 1 Cue Dry Render (${runId})`;
+        const pitchReport = JSON.parse(pitchRes.stdout) as IndependentPitchReport;
+        const drySha256 = hashRes.stdout.trim().split(/\s+/)[0] ?? '';
+        setBoundedSessionMap(rec, rec.editedCues, runId, editedCuesPath, rec.evictedCuesRunIds);
+        setBoundedSessionMap(rec, rec.editedDryWavs, runId, dryWavPath, rec.evictedCuesRunIds);
+        rec.lastOutputWav = dryWavPath;
+        rec.lastOutputLabel = `Stage 1 Cue Dry Render (${runId})`;
+        committed = true;
+        enforceSessionDiskQuotas(rec);
 
-      res.json({
-        runId,
-        drySha256,
-        dryWavUrl: registerMedia(dryWavPath, 'audio/wav', `dry-edited-${runId}.wav`),
-        cuesJsonUrl: registerMedia(editedCuesPath, 'application/json', `cues-edited-${runId}.json`),
-        pitchCheck: pitchReport,
-        notes: summarizeNotes(rawCues),
-      });
+        res.json({
+          runId,
+          drySha256,
+          dryWavUrl: registerMedia(dryWavPath, 'audio/wav', `dry-edited-${runId}.wav`),
+          cuesJsonUrl: registerMedia(editedCuesPath, 'application/json', `cues-edited-${runId}.json`),
+          pitchCheck: pitchReport,
+          notes: summarizeNotes(rawCues),
+        });
+      } finally {
+        if (!committed && fs.existsSync(runDir)) {
+          try {
+            fs.rmSync(runDir, { recursive: true, force: true });
+          } catch {
+            // ignore failed job cleanup error
+          }
+        }
+      }
     } catch (err) {
       res.status(400).json({ error: sanitizeClientError(err, 'Failed to render edited cues.') });
     }
@@ -893,10 +1053,20 @@ async function startServer() {
           ? Math.max(0, Math.min(137, Math.floor(Number(sourceIndexRaw))))
           : null;
       const cuesRunId = typeof req.query.cuesRunId === 'string' ? req.query.cuesRunId : '';
-      const cuesPath =
-        (cuesRunId && rec.editedCues.get(cuesRunId)) || path.join(rec.verifyDir, 'cues.json');
-      if (!fs.existsSync(rec.sourceWav) || !fs.existsSync(cuesPath)) {
-        res.status(404).json({ error: 'Reference audio or extracted cues file not found.' });
+      const cuesRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedCues,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'cues.json'),
+        'cues',
+      );
+      if (!cuesRes.ok) {
+        res.status(cuesRes.status).json({ error: cuesRes.error, code: cuesRes.code });
+        return;
+      }
+      const cuesPath = cuesRes.filePath;
+      if (!fs.existsSync(rec.sourceWav)) {
+        res.status(404).json({ error: 'Reference audio file not found.' });
         return;
       }
       const args = ['reference-shape', rec.sourceWav, cuesPath];
@@ -910,6 +1080,8 @@ async function startServer() {
 
   app.post('/api/sessions/:id/regenerate-source', async (req: Request, res: Response) => {
     let voicingPath: string | null = null;
+    let runDir: string | null = null;
+    let committed = false;
     try {
       const id = String(req.params.id);
       if (id === 'slow-solo-ref') {
@@ -922,16 +1094,22 @@ async function startServer() {
       }
       const sourceIndex = Math.max(0, Math.floor(Number(req.body?.sourceIndex ?? 1) || 0));
       const cuesRunId = typeof req.body?.cuesRunId === 'string' ? req.body.cuesRunId : '';
-      const cuesPath =
-        (cuesRunId && rec.editedCues.get(cuesRunId)) || path.join(rec.verifyDir, 'cues.json');
-      if (!fs.existsSync(cuesPath)) {
-        res.status(400).json({ error: 'Extracted performance cues JSON not found for session.' });
+      const cuesRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedCues,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'cues.json'),
+        'cues',
+      );
+      if (!cuesRes.ok) {
+        res.status(cuesRes.status).json({ error: cuesRes.error, code: cuesRes.code });
         return;
       }
+      const cuesPath = cuesRes.filePath;
       const rawCues = JSON.parse(fs.readFileSync(cuesPath, 'utf8')) as RawCuePerformance;
 
       const runId = crypto.randomUUID().slice(0, 8);
-      const runDir = path.join(rec.workDir, `source-regen-${runId}`);
+      runDir = path.join(rec.workDir, `source-regen-${runId}`);
       ensurePrivateDir(runDir);
       const dryWavPath = path.join(runDir, `dry-source-${sourceIndex}.wav`);
 
@@ -977,10 +1155,12 @@ async function startServer() {
       ]);
       const pitchCheck = JSON.parse(pitchRes.stdout) as IndependentPitchReport;
 
-      setBoundedSessionMap(rec, rec.editedCues, runId, cuesPath);
-      setBoundedSessionMap(rec, rec.editedDryWavs, runId, dryWavPath);
+      setBoundedSessionMap(rec, rec.editedCues, runId, cuesPath, rec.evictedCuesRunIds);
+      setBoundedSessionMap(rec, rec.editedDryWavs, runId, dryWavPath, rec.evictedCuesRunIds);
       rec.lastOutputWav = dryWavPath;
       rec.lastOutputLabel = `Stage 1 Dry Regeneration · ${renderReport.source_name}`;
+      committed = true;
+      enforceSessionDiskQuotas(rec);
 
       res.json({
         runId,
@@ -1011,11 +1191,20 @@ async function startServer() {
           // ignore temp cleanup failure
         }
       }
+      if (!committed && runDir && fs.existsSync(runDir)) {
+        try {
+          fs.rmSync(runDir, { recursive: true, force: true });
+        } catch {
+          // ignore failed job cleanup error
+        }
+      }
     }
   });
 
   app.post('/api/sessions/:id/dry-region-edit', async (req: Request, res: Response) => {
     let cfgPath: string | null = null;
+    let runDir: string | null = null;
+    let committed = false;
     try {
       const id = String(req.params.id);
       if (id === 'slow-solo-ref') {
@@ -1027,15 +1216,30 @@ async function startServer() {
         return;
       }
       const cuesRunId = typeof req.body?.cuesRunId === 'string' ? req.body.cuesRunId : '';
-      const cuesPath =
-        (cuesRunId && rec.editedCues.get(cuesRunId)) || path.join(rec.verifyDir, 'cues.json');
-      const cachedDryPath =
-        (cuesRunId && rec.editedDryWavs.get(cuesRunId)) ||
-        path.join(rec.verifyDir, 'dry-candidate.wav');
-      if (!fs.existsSync(cuesPath) || !fs.existsSync(cachedDryPath)) {
-        res.status(400).json({ error: 'Cached dry take or extracted cues JSON not found.' });
+      const cuesRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedCues,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'cues.json'),
+        'cues',
+      );
+      if (!cuesRes.ok) {
+        res.status(cuesRes.status).json({ error: cuesRes.error, code: cuesRes.code });
         return;
       }
+      const dryRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedDryWavs,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'dry-candidate.wav'),
+        'dry take',
+      );
+      if (!dryRes.ok) {
+        res.status(dryRes.status).json({ error: dryRes.error, code: dryRes.code });
+        return;
+      }
+      const cuesPath = cuesRes.filePath;
+      const cachedDryPath = dryRes.filePath;
 
       const commit = req.body?.commit === true;
       const sourceIndex = Math.max(0, Math.floor(Number(req.body?.sourceIndex ?? 1) || 0));
@@ -1043,7 +1247,7 @@ async function startServer() {
       const voicing = req.body?.voicing ?? undefined;
 
       const runId = crypto.randomUUID().slice(0, 8);
-      const runDir = path.join(rec.workDir, `region-edit-${runId}`);
+      runDir = path.join(rec.workDir, `region-edit-${runId}`);
       ensurePrivateDir(runDir);
       cfgPath = path.join(runDir, `region-cfg-${runId}.json`);
       const outEdited = path.join(runDir, `dry-edited-${runId}.wav`);
@@ -1068,13 +1272,15 @@ async function startServer() {
       const report = JSON.parse(stdout) as Record<string, unknown>;
 
       if (commit) {
-        setBoundedSessionMap(rec, rec.editedCues, runId, cuesPath);
-        setBoundedSessionMap(rec, rec.editedDryWavs, runId, outEdited);
+        setBoundedSessionMap(rec, rec.editedCues, runId, cuesPath, rec.evictedCuesRunIds);
+        setBoundedSessionMap(rec, rec.editedDryWavs, runId, outEdited, rec.evictedCuesRunIds);
         rec.lastOutputWav = outEdited;
         rec.lastOutputLabel = `Stage 2 Dry Region Edit (${runId})`;
       } else {
         setBoundedSessionMap(rec, rec.auxRuns, `region-preview-${runId}`, runDir);
       }
+      committed = true;
+      enforceSessionDiskQuotas(rec);
 
       res.json({
         runId,
@@ -1094,11 +1300,20 @@ async function startServer() {
           // ignore temp cleanup failure
         }
       }
+      if (!committed && runDir && fs.existsSync(runDir)) {
+        try {
+          fs.rmSync(runDir, { recursive: true, force: true });
+        } catch {
+          // ignore failed job cleanup error
+        }
+      }
     }
   });
 
   app.post('/api/sessions/:id/pipeline-render', async (req: Request, res: Response) => {
     let cfgPath: string | null = null;
+    let outWavPath: string | null = null;
+    let committed = false;
     try {
       const id = String(req.params.id);
       if (id === 'slow-solo-ref') {
@@ -1110,24 +1325,32 @@ async function startServer() {
         return;
       }
       const cuesRunId = typeof req.body?.cuesRunId === 'string' ? req.body.cuesRunId : '';
-      const cachedDryPath =
-        (cuesRunId && rec.editedDryWavs.get(cuesRunId)) ||
-        path.join(rec.verifyDir, 'dry-candidate.wav');
-      if (!fs.existsSync(cachedDryPath)) {
-        res.status(400).json({ error: 'Cached dry take WAV not found for session.' });
+      const dryRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedDryWavs,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'dry-candidate.wav'),
+        'dry take',
+      );
+      if (!dryRes.ok) {
+        res.status(dryRes.status).json({ error: dryRes.error, code: dryRes.code });
         return;
       }
+      const cachedDryPath = dryRes.filePath;
 
       const runId = crypto.randomUUID().slice(0, 8);
       const pipeDir = path.join(rec.workDir, 'pipeline');
       ensurePrivateDir(pipeDir);
       cfgPath = path.join(pipeDir, `pipeline-cfg-${runId}.json`);
-      const outWavPath = path.join(pipeDir, `pipeline-out-${runId}.wav`);
+      outWavPath = path.join(pipeDir, `pipeline-out-${runId}.wav`);
 
       const payload = {
         mic_enabled: Boolean(req.body?.micEnabled),
         room_enabled: Boolean(req.body?.roomEnabled),
         rig: req.body?.rigConfig ?? {},
+        preamp_drive: Number.isFinite(Number(req.body?.preampDrive))
+          ? Number(req.body?.preampDrive)
+          : 0,
         plugin_slot: req.body?.pluginSlot ?? { enabled: false, plugin_id: 'none' },
       };
       fs.writeFileSync(cfgPath, JSON.stringify(payload), { encoding: 'utf8', mode: 0o600 });
@@ -1140,9 +1363,11 @@ async function startServer() {
       if (payload.plugin_slot?.enabled && payload.plugin_slot?.plugin_id !== 'none') {
         activeParts.push(`Stage 5 Plugin (${String(payload.plugin_slot.plugin_id)})`);
       }
-      setBoundedSessionMap(rec, rec.pipelineOutputs, runId, outWavPath);
+      setBoundedSessionMap(rec, rec.pipelineOutputs, runId, outWavPath, rec.evictedPipelineRunIds);
       rec.lastOutputWav = outWavPath;
       rec.lastOutputLabel = activeParts.join(' -> ');
+      committed = true;
+      enforceSessionDiskQuotas(rec);
       res.json({
         runId,
         wavUrl: registerMedia(outWavPath, 'audio/wav', `${rec.id}-pipeline-${runId}.wav`),
@@ -1156,6 +1381,13 @@ async function startServer() {
           fs.unlinkSync(cfgPath);
         } catch {
           // ignore temp cleanup failure
+        }
+      }
+      if (!committed && outWavPath && fs.existsSync(outWavPath)) {
+        try {
+          fs.unlinkSync(outWavPath);
+        } catch {
+          // ignore failed output cleanup
         }
       }
     }
@@ -1183,56 +1415,70 @@ async function startServer() {
       const runId = crypto.randomUUID().slice(0, 8);
       const runDir = path.join(rec.workDir, `layers-${runId}`);
       ensurePrivateDir(runDir);
-      setBoundedSessionMap(rec, rec.auxRuns, `layers-${runId}`, runDir);
-      const windowWav = path.join(runDir, 'window.wav');
-      const analysisJson = path.join(runDir, 'analysis.json');
-      const renderDir = path.join(runDir, 'stems');
-      fs.writeFileSync(windowWav, sliced.buffer, { flag: 'wx', mode: 0o600 });
+      let committed = false;
+      try {
+        const windowWav = path.join(runDir, 'window.wav');
+        const analysisJson = path.join(runDir, 'analysis.json');
+        const renderDir = path.join(runDir, 'stems');
+        fs.writeFileSync(windowWav, sliced.buffer, { flag: 'wx', mode: 0o600 });
 
-      const analyzeCmd = faintRidges ? 'analyze-layers-faint' : 'analyze-layers';
-      await runRust(SC_BIN, [analyzeCmd, windowWav, analysisJson]);
-      await runRust(SC_BIN, ['render-layers', analysisJson, renderDir]);
+        const analyzeCmd = faintRidges ? 'analyze-layers-faint' : 'analyze-layers';
+        await runRust(SC_BIN, [analyzeCmd, windowWav, analysisJson]);
+        await runRust(SC_BIN, ['render-layers', analysisJson, renderDir]);
 
-      const payload: LayerSessionResult = {
-        runId,
-        startS: sliced.startS,
-        endS: sliced.endS,
-        faintRidges,
-        mixUrl: registerMedia(path.join(renderDir, 'mix.wav'), 'audio/wav', `layers-mix-${runId}.wav`),
-        analysisJsonUrl: registerMedia(analysisJson, 'application/json', `layers-analysis-${runId}.json`),
-        stems: [
-          {
-            id: 'pitch',
-            label: 'Pitch',
-            description: 'Coherent fundamental & harmonic ridges',
-            url: registerMedia(path.join(renderDir, 'pitch.wav'), 'audio/wav', `stem-pitch-${runId}.wav`),
-          },
-          {
-            id: 'ringing',
-            label: 'Ringing',
-            description: 'Resonant sustain & body modes',
-            url: registerMedia(path.join(renderDir, 'ring.wav'), 'audio/wav', `stem-ring-${runId}.wav`),
-          },
-          {
-            id: 'texture',
-            label: 'Texture',
-            description: 'Broadband pick / air / non-tonal residual',
-            url: registerMedia(path.join(renderDir, 'texture.wav'), 'audio/wav', `stem-texture-${runId}.wav`),
-          },
-          {
-            id: 'breath_accent',
-            label: 'Breath Accent',
-            description: 'Localized transient / breath accent cue',
-            url: registerMedia(
-              path.join(renderDir, 'accent.wav'),
-              'audio/wav',
-              `stem-accent-${runId}.wav`,
-            ),
-          },
-        ],
-      };
+        setBoundedSessionMap(rec, rec.auxRuns, `layers-${runId}`, runDir);
+        committed = true;
+        enforceSessionDiskQuotas(rec);
 
-      res.json(payload);
+        const payload: LayerSessionResult = {
+          runId,
+          startS: sliced.startS,
+          endS: sliced.endS,
+          faintRidges,
+          mixUrl: registerMedia(path.join(renderDir, 'mix.wav'), 'audio/wav', `layers-mix-${runId}.wav`),
+          analysisJsonUrl: registerMedia(analysisJson, 'application/json', `layers-analysis-${runId}.json`),
+          stems: [
+            {
+              id: 'pitch',
+              label: 'Pitch',
+              description: 'Coherent fundamental & harmonic ridges',
+              url: registerMedia(path.join(renderDir, 'pitch.wav'), 'audio/wav', `stem-pitch-${runId}.wav`),
+            },
+            {
+              id: 'ringing',
+              label: 'Ringing',
+              description: 'Resonant sustain & body modes',
+              url: registerMedia(path.join(renderDir, 'ring.wav'), 'audio/wav', `stem-ring-${runId}.wav`),
+            },
+            {
+              id: 'texture',
+              label: 'Texture',
+              description: 'Broadband pick / air / non-tonal residual',
+              url: registerMedia(path.join(renderDir, 'texture.wav'), 'audio/wav', `stem-texture-${runId}.wav`),
+            },
+            {
+              id: 'breath_accent',
+              label: 'Breath Accent',
+              description: 'Localized transient / breath accent cue',
+              url: registerMedia(
+                path.join(renderDir, 'accent.wav'),
+                'audio/wav',
+                `stem-accent-${runId}.wav`,
+              ),
+            },
+          ],
+        };
+
+        res.json(payload);
+      } finally {
+        if (!committed && fs.existsSync(runDir)) {
+          try {
+            fs.rmSync(runDir, { recursive: true, force: true });
+          } catch {
+            // ignore failed layer cleanup
+          }
+        }
+      }
     } catch (err) {
       res.status(400).json({ error: sanitizeClientError(err, 'Failed to render editable layers.') });
     }
@@ -1408,13 +1654,18 @@ async function startServer() {
         return;
       }
       const cuesRunId = typeof req.body?.cuesRunId === 'string' ? req.body.cuesRunId : '';
-      const dryWavPath =
-        (cuesRunId && rec.editedDryWavs.get(cuesRunId)) ||
-        path.join(rec.verifyDir, 'dry-candidate.wav');
-      if (!fs.existsSync(dryWavPath)) {
-        res.status(400).json({ error: 'Dry candidate WAV not found for session.' });
+      const dryRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedDryWavs,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'dry-candidate.wav'),
+        'dry take',
+      );
+      if (!dryRes.ok) {
+        res.status(dryRes.status).json({ error: dryRes.error, code: dryRes.code });
         return;
       }
+      const dryWavPath = dryRes.filePath;
 
       const rigConfig = req.body?.rigConfig ?? {};
       const runId = crypto.randomUUID().slice(0, 8);
@@ -1429,6 +1680,7 @@ async function startServer() {
       setBoundedSessionMap(rec, rec.auxRuns, `capture-${runId}`, outWavPath);
       rec.lastOutputWav = outWavPath;
       rec.lastOutputLabel = `Stage 4 Studio Capture (${runId})`;
+      enforceSessionDiskQuotas(rec);
       res.json({
         runId,
         wavUrl: registerMedia(outWavPath, 'audio/wav', `${rec.id}-capture-${runId}.wav`),
@@ -1466,12 +1718,18 @@ async function startServer() {
         return;
       }
       const cuesRunId = typeof req.body?.cuesRunId === 'string' ? req.body.cuesRunId : '';
-      const cuesPath =
-        (cuesRunId && rec.editedCues.get(cuesRunId)) || path.join(rec.verifyDir, 'cues.json');
-      if (!fs.existsSync(cuesPath)) {
-        res.status(400).json({ error: 'Extracted cues JSON not found for session.' });
+      const cuesRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedCues,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'cues.json'),
+        'cues',
+      );
+      if (!cuesRes.ok) {
+        res.status(cuesRes.status).json({ error: cuesRes.error, code: cuesRes.code });
         return;
       }
+      const cuesPath = cuesRes.filePath;
 
       const rigConfig = req.body?.rigConfig ?? {};
       const runId = crypto.randomUUID().slice(0, 8);
@@ -1491,6 +1749,7 @@ async function startServer() {
       setBoundedSessionMap(rec, rec.auxRuns, `prompt-${runId}`, outWavPath);
       rec.lastOutputWav = outWavPath;
       rec.lastOutputLabel = `Stage 4 Prompt Render (${runId})`;
+      enforceSessionDiskQuotas(rec);
       res.json({
         runId,
         wavUrl: registerMedia(outWavPath, 'audio/wav', `${rec.id}-prompt-render-${runId}.wav`),
@@ -1510,6 +1769,8 @@ async function startServer() {
   });
 
   app.post('/api/sessions/:id/variants', async (req: Request, res: Response) => {
+    let outDir: string | null = null;
+    let committed = false;
     try {
       const id = String(req.params.id);
       if (id === 'slow-solo-ref') {
@@ -1528,11 +1789,21 @@ async function startServer() {
       }
       const selection = parseSelectionStrict(String(req.body?.selection ?? 'all'));
       const cuesRunId = typeof req.body?.cuesRunId === 'string' ? req.body.cuesRunId : '';
-      const cuesPath =
-        (cuesRunId && rec.editedCues.get(cuesRunId)) || path.join(rec.verifyDir, 'cues.json');
+      const cuesRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedCues,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'cues.json'),
+        'cues',
+      );
+      if (!cuesRes.ok) {
+        res.status(cuesRes.status).json({ error: cuesRes.error, code: cuesRes.code });
+        return;
+      }
+      const cuesPath = cuesRes.filePath;
 
       const runId = crypto.randomUUID().slice(0, 8);
-      const outDir = path.join(rec.workDir, `variants-${runId}`);
+      outDir = path.join(rec.workDir, `variants-${runId}`);
       await runRust(SC_QA, [
         'guitar-variants',
         rec.sourceWav,
@@ -1543,6 +1814,8 @@ async function startServer() {
       ]);
       rec.variantsDir = outDir;
       setBoundedSessionMap(rec, rec.auxRuns, `variants-${runId}`, outDir);
+      committed = true;
+      enforceSessionDiskQuotas(rec);
 
       const manifest = hydrateVariants(outDir);
       if (!manifest) {
@@ -1551,6 +1824,14 @@ async function startServer() {
       res.json(manifest);
     } catch (err) {
       res.status(400).json({ error: sanitizeClientError(err, 'Failed to render capture variants.') });
+    } finally {
+      if (!committed && outDir && fs.existsSync(outDir)) {
+        try {
+          fs.rmSync(outDir, { recursive: true, force: true });
+        } catch {
+          // ignore failed variants cleanup
+        }
+      }
     }
   });
 
@@ -1577,23 +1858,40 @@ async function startServer() {
           : `${rec.label} — Blind Before/After Technical Audit`;
       const safeTitle = rawTitle.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').slice(0, 140);
 
+      // Audit H5: Strict run selector resolution — NEVER silently fall back to baseline!
       let candidateAfter = path.join(rec.verifyDir, 'dry-candidate.wav');
       if (pipelineRunId) {
-        const pipeOut = rec.pipelineOutputs.get(pipelineRunId);
-        if (pipeOut && fs.existsSync(pipeOut)) {
-          candidateAfter = pipeOut;
+        const pipeRes = resolveStrictRunArtifact(
+          pipelineRunId,
+          rec.pipelineOutputs,
+          rec.evictedPipelineRunIds,
+          candidateAfter,
+          'pipeline output',
+        );
+        if (!pipeRes.ok) {
+          res.status(pipeRes.status).json({ error: pipeRes.error, code: pipeRes.code });
+          return;
         }
+        candidateAfter = pipeRes.filePath;
       } else if (cuesRunId) {
-        const edited = rec.editedDryWavs.get(cuesRunId);
-        if (edited && fs.existsSync(edited)) {
-          candidateAfter = edited;
+        const dryRes = resolveStrictRunArtifact(
+          cuesRunId,
+          rec.editedDryWavs,
+          rec.evictedCuesRunIds,
+          candidateAfter,
+          'dry take',
+        );
+        if (!dryRes.ok) {
+          res.status(dryRes.status).json({ error: dryRes.error, code: dryRes.code });
+          return;
         }
+        candidateAfter = dryRes.filePath;
       } else if (!hasExplicitRunSelector && rec.lastOutputWav && fs.existsSync(rec.lastOutputWav)) {
         candidateAfter = rec.lastOutputWav;
       }
 
       if (!fs.existsSync(rec.sourceWav) || !fs.existsSync(candidateAfter)) {
-        res.status(400).json({ error: 'Both raw input WAV and rendered output WAV are required.' });
+        res.status(404).json({ error: 'Both raw input WAV and rendered output WAV are required.', code: 'ARTIFACT_NOT_FOUND' });
         return;
       }
 
@@ -1621,6 +1919,7 @@ async function startServer() {
 
       const report = JSON.parse(fs.readFileSync(reportJsonPath, 'utf8')) as Record<string, unknown>;
       setBoundedSessionMap(rec, rec.reports, reportId, reportJsonPath);
+      enforceSessionDiskQuotas(rec);
 
       res.json({
         reportId,
@@ -1646,7 +1945,7 @@ async function startServer() {
       const reportId = typeof req.body?.reportId === 'string' ? req.body.reportId : '';
       const reportJsonPath = reportId ? rec.reports.get(reportId) : null;
       if (!reportJsonPath || !isConfinedPath(rec.workDir, reportJsonPath) || !fs.existsSync(reportJsonPath)) {
-        res.status(404).json({ error: 'Technical report not found. Generate a report first.' });
+        res.status(404).json({ error: 'Technical report not found. Generate a report first.', code: 'ARTIFACT_NOT_FOUND' });
         return;
       }
 
@@ -1656,11 +1955,23 @@ async function startServer() {
         return;
       }
 
+      // Audit M8: Cache report exports by (reportId, format) so repeated exports reuse 1 file on disk.
+      const cacheKey = `${reportId}:${rawFormat}`;
+      const existingExport = rec.reportExports.get(cacheKey);
+      if (existingExport && fs.existsSync(existingExport.outPath)) {
+        res.json({
+          url: existingExport.url,
+          downloadUrl: existingExport.downloadUrl,
+          filename: existingExport.filename,
+          receipt: existingExport.receipt,
+        });
+        return;
+      }
+
       const reportDir = path.join(rec.workDir, 'reports');
       ensurePrivateDir(reportDir);
-      const exportId = crypto.randomUUID().slice(0, 8);
       const ext = rawFormat === 'pdf' ? 'pdf' : 'md';
-      const outPath = path.join(reportDir, `spectracraft-report-${reportId}-${exportId}.${ext}`);
+      const outPath = path.join(reportDir, `spectracraft-report-${reportId}-${rawFormat}.${ext}`);
 
       const { stdout } = await runRust(SC_QA, ['export-report', reportJsonPath, outPath, rawFormat]);
       const receipt = JSON.parse(stdout) as {
@@ -1682,10 +1993,19 @@ async function startServer() {
         receipt.content_type || (ext === 'pdf' ? 'application/pdf' : 'text/markdown; charset=utf-8'),
         downloadFilename,
       );
+      const downloadUrl = `${url}?download=1`;
+      rec.reportExports.set(cacheKey, {
+        outPath,
+        url,
+        downloadUrl,
+        filename: downloadFilename,
+        receipt: receipt as unknown as Record<string, unknown>,
+      });
+      enforceSessionDiskQuotas(rec);
 
       res.json({
         url,
-        downloadUrl: `${url}?download=1`,
+        downloadUrl,
         filename: downloadFilename,
         receipt,
       });
@@ -1695,6 +2015,8 @@ async function startServer() {
   });
 
   app.post('/api/sessions/:id/daw-export', async (req: Request, res: Response) => {
+    let outDir: string | null = null;
+    let committed = false;
     try {
       const id = String(req.params.id);
       if (id === 'slow-solo-ref') {
@@ -1719,33 +2041,53 @@ async function startServer() {
       const pipelineRunId =
         typeof req.body?.pipelineRunId === 'string' ? req.body.pipelineRunId.trim() : '';
 
-      const dryWav =
-        (cuesRunId && rec.editedDryWavs.get(cuesRunId)) ||
-        path.join(rec.verifyDir, 'dry-candidate.wav');
-      if (!fs.existsSync(dryWav)) {
-        res.status(400).json({ error: 'Dry take WAV (dry-candidate.wav) not found for this session.' });
+      // Audit H5: Strict run selector resolution — unknown or expired IDs return 404/410 instead of silently exporting baseline!
+      const dryRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedDryWavs,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'dry-candidate.wav'),
+        'dry take',
+      );
+      if (!dryRes.ok) {
+        res.status(dryRes.status).json({ error: dryRes.error, code: dryRes.code });
         return;
       }
+      const dryWav = dryRes.filePath;
 
       let finalWav = dryWav;
       if (pipelineRunId) {
-        const pipeOut = rec.pipelineOutputs.get(pipelineRunId);
-        if (pipeOut && fs.existsSync(pipeOut)) {
-          finalWav = pipeOut;
+        const pipeRes = resolveStrictRunArtifact(
+          pipelineRunId,
+          rec.pipelineOutputs,
+          rec.evictedPipelineRunIds,
+          dryWav,
+          'pipeline output',
+        );
+        if (!pipeRes.ok) {
+          res.status(pipeRes.status).json({ error: pipeRes.error, code: pipeRes.code });
+          return;
         }
+        finalWav = pipeRes.filePath;
       } else if (!hasExplicitRunSelector && rec.lastOutputWav && fs.existsSync(rec.lastOutputWav)) {
         finalWav = rec.lastOutputWav;
       }
 
-      const cuesJson =
-        (cuesRunId && rec.editedCues.get(cuesRunId)) || path.join(rec.verifyDir, 'cues.json');
-      const cuesArg = fs.existsSync(cuesJson) ? cuesJson : '-';
+      const cuesRes = resolveStrictRunArtifact(
+        cuesRunId,
+        rec.editedCues,
+        rec.evictedCuesRunIds,
+        path.join(rec.verifyDir, 'cues.json'),
+        'cues',
+      );
+      const cuesArg = cuesRes.ok ? cuesRes.filePath : '-';
 
       const exportId = crypto.randomUUID().slice(0, 8);
-      const outDir = path.join(rec.workDir, 'daw-interchange', `${targetRaw}-${exportId}`);
+      outDir = path.join(rec.workDir, 'daw-interchange', `${targetRaw}-${exportId}`);
       ensurePrivateDir(outDir);
-      setBoundedSessionMap(rec, rec.auxRuns, `daw-${exportId}`, outDir);
 
+      // Audit M10: Do NOT pass fabricated default engine state; updated spectracraft-qa export-daw
+      // omits engine_state and records explicit source_signature_note when no live snapshot is supplied.
       const { stdout } = await runRust(SC_QA, [
         'export-daw',
         targetRaw,
@@ -1756,6 +2098,9 @@ async function startServer() {
         rec.label,
         bitDepth,
       ]);
+      setBoundedSessionMap(rec, rec.auxRuns, `daw-${exportId}`, outDir);
+      committed = true;
+      enforceSessionDiskQuotas(rec);
 
       const receipt = JSON.parse(stdout) as {
         schema_version: number;
@@ -1778,9 +2123,10 @@ async function startServer() {
         return 'application/json; charset=utf-8';
       };
 
+      const resolvedOutDir = outDir;
       const files = receipt.assets.map((asset) => {
-        const abs = path.resolve(outDir, asset.relative_path);
-        const url = isConfinedPath(outDir, abs)
+        const abs = path.resolve(resolvedOutDir, asset.relative_path);
+        const url = isConfinedPath(resolvedOutDir, abs)
           ? registerMedia(abs, contentTypeFor(asset.relative_path), path.basename(asset.relative_path))
           : null;
         return {
@@ -1796,6 +2142,14 @@ async function startServer() {
       });
     } catch (err) {
       res.status(400).json({ error: sanitizeClientError(err, 'Failed to export DAW interchange bundle.') });
+    } finally {
+      if (!committed && outDir && fs.existsSync(outDir)) {
+        try {
+          fs.rmSync(outDir, { recursive: true, force: true });
+        } catch {
+          // ignore failed DAW export cleanup
+        }
+      }
     }
   });
 
@@ -1893,25 +2247,26 @@ async function startServer() {
     }
   });
 
-  const HELP_DOCS: Record<string, { title: string; relativePath: string }> = {
-    readme: { title: 'README — SpectraCraft Overview', relativePath: 'README.md' },
-    spec: { title: 'SPECTRACRAFT_SPEC.md — Authoritative Spec', relativePath: 'SPECTRACRAFT_SPEC.md' },
-    'craft-libs': { title: 'CRAFT_LIBS_MAINTENANCE.md — craft-libs & Updates', relativePath: 'CRAFT_LIBS_MAINTENANCE.md' },
-    'design-contract': { title: 'DESIGN-CONTRACT.md — Dry Gate & Visual Boundaries', relativePath: 'spectracraft-mono/DESIGN-CONTRACT.md' },
-    platform: { title: 'PLATFORM.md — Desktop Platform Notes', relativePath: 'PLATFORM.md' },
-    plugin: { title: 'PLUGIN_ARCHITECTURE.md — Engine & Plugin Contract', relativePath: 'PLUGIN_ARCHITECTURE.md' },
-  };
+  // Audit M14: Own-key Map prevents prototype property collisions (`constructor`, `toString`, `__proto__`).
+  const HELP_DOCS = new Map<string, { title: string; relativePath: string }>([
+    ['readme', { title: 'README — SpectraCraft Overview', relativePath: 'README.md' }],
+    ['spec', { title: 'SPECTRACRAFT_SPEC.md — Authoritative Spec', relativePath: 'SPECTRACRAFT_SPEC.md' }],
+    ['craft-libs', { title: 'CRAFT_LIBS_MAINTENANCE.md — craft-libs & Updates', relativePath: 'CRAFT_LIBS_MAINTENANCE.md' }],
+    ['design-contract', { title: 'DESIGN-CONTRACT.md — Dry Gate & Visual Boundaries', relativePath: 'spectracraft-mono/DESIGN-CONTRACT.md' }],
+    ['platform', { title: 'PLATFORM.md — Desktop Platform Notes', relativePath: 'PLATFORM.md' }],
+    ['plugin', { title: 'PLUGIN_ARCHITECTURE.md — Engine & Plugin Contract', relativePath: 'PLUGIN_ARCHITECTURE.md' }],
+  ]);
 
   app.get('/api/help/docs/:docId', (req: Request, res: Response) => {
     const docId = String(req.params.docId ?? '').trim().toLowerCase();
-    const meta = HELP_DOCS[docId];
+    const meta = HELP_DOCS.get(docId);
     if (!meta) {
-      res.status(404).json({ error: 'Unknown documentation topic.' });
+      res.status(404).json({ error: 'Unknown documentation topic.', code: 'DOC_NOT_FOUND' });
       return;
     }
     const fullPath = path.resolve(ROOT, meta.relativePath);
     if (!isConfinedPath(ROOT, fullPath) || !fs.existsSync(fullPath)) {
-      res.status(404).json({ error: `Document not found on disk: ${meta.relativePath}` });
+      res.status(404).json({ error: `Document not found on disk: ${meta.relativePath}`, code: 'DOC_NOT_FOUND' });
       return;
     }
     res.json({
@@ -1922,70 +2277,129 @@ async function startServer() {
     });
   });
 
-  app.get('/api/media/:key', (req: Request, res: Response) => {
+  // Audit H11: Race-free descriptor-based media streaming with active artifact lease + stream.pipeline error handling.
+  app.get('/api/media/:key', async (req: Request, res: Response) => {
     const entry = mediaRegistry.get(String(req.params.key));
-    if (!entry || !fs.existsSync(entry.filePath)) {
-      res.status(404).json({ error: 'Artifact not found.' });
+    if (!entry) {
+      res.status(404).json({ error: 'Artifact not found.', code: 'ARTIFACT_NOT_FOUND' });
       return;
     }
-    const stat = fs.statSync(entry.filePath);
-    res.setHeader('Content-Type', entry.contentType);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Accept-Ranges', 'bytes');
-    if (entry.contentType === 'image/svg+xml') {
-      res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-      );
-    }
-    if (req.query.download === '1') {
-      const safeDownloadName = sanitizeDownloadName(entry.downloadName);
-      res.setHeader('Content-Disposition', `attachment; filename="${safeDownloadName}"`);
-    }
-
-    const range = req.headers.range;
-    if (range && entry.contentType === 'audio/wav') {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
-      if (!match || (!match[1] && !match[2])) {
-        res.status(416);
-        res.setHeader('Content-Range', `bytes */${stat.size}`);
-        res.end();
+    const releaseLease = artifactLeases.acquire(entry.filePath);
+    let fh: fs.promises.FileHandle | null = null;
+    try {
+      fh = await fs.promises.open(entry.filePath, 'r');
+      const stat = await fh.stat();
+      if (!stat.isFile()) {
+        res.status(404).json({ error: 'Artifact not found.', code: 'ARTIFACT_NOT_FOUND' });
         return;
       }
-      let start: number;
-      let end: number;
-      if (!match[1]) {
-        const suffixLen = Number.parseInt(match[2], 10);
-        if (!Number.isFinite(suffixLen) || suffixLen <= 0 || stat.size === 0) {
+
+      res.setHeader('Content-Type', entry.contentType);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Accept-Ranges', 'bytes');
+      if (entry.contentType === 'image/svg+xml') {
+        res.setHeader(
+          'Content-Security-Policy',
+          "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        );
+      }
+      if (req.query.download === '1') {
+        const safeDownloadName = sanitizeDownloadName(entry.downloadName);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeDownloadName}"`);
+      }
+
+      let readOpts: { start?: number; end?: number; autoClose: boolean } = { autoClose: false };
+      const range = req.headers.range;
+      if (range && entry.contentType === 'audio/wav') {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+        if (!match || (!match[1] && !match[2])) {
           res.status(416);
           res.setHeader('Content-Range', `bytes */${stat.size}`);
           res.end();
           return;
         }
-        start = Math.max(0, stat.size - suffixLen);
-        end = stat.size - 1;
+        let start: number;
+        let end: number;
+        if (!match[1]) {
+          const suffixLen = Number.parseInt(match[2], 10);
+          if (!Number.isFinite(suffixLen) || suffixLen <= 0 || stat.size === 0) {
+            res.status(416);
+            res.setHeader('Content-Range', `bytes */${stat.size}`);
+            res.end();
+            return;
+          }
+          start = Math.max(0, stat.size - suffixLen);
+          end = stat.size - 1;
+        } else {
+          start = Number.parseInt(match[1], 10);
+          end = match[2] ? Math.min(stat.size - 1, Number.parseInt(match[2], 10)) : stat.size - 1;
+        }
+        if (start < 0 || start > end || start >= stat.size) {
+          res.status(416);
+          res.setHeader('Content-Range', `bytes */${stat.size}`);
+          res.end();
+          return;
+        }
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+        res.setHeader('Content-Length', String(end - start + 1));
+        readOpts = { start, end, autoClose: false };
       } else {
-        start = Number.parseInt(match[1], 10);
-        end = match[2] ? Math.min(stat.size - 1, Number.parseInt(match[2], 10)) : stat.size - 1;
+        res.setHeader('Content-Length', String(stat.size));
       }
-      if (start < 0 || start > end || start >= stat.size) {
-        res.status(416);
-        res.setHeader('Content-Range', `bytes */${stat.size}`);
-        res.end();
+
+      const stream = fh.createReadStream(readOpts);
+      await streamPipeline(stream, res);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        if (!res.headersSent) {
+          res.status(404).json({ error: 'Artifact not found.', code: 'ARTIFACT_NOT_FOUND' });
+        }
         return;
       }
-      res.status(206);
-      res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
-      res.setHeader('Content-Length', String(end - start + 1));
-      fs.createReadStream(entry.filePath, { start, end }).pipe(res);
-      return;
+      // Client disconnects mid-download (ERR_STREAM_PREMATURE_CLOSE / ECONNRESET / EPIPE) are normal and non-fatal.
+      if (
+        code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+        code === 'ECONNRESET' ||
+        code === 'EPIPE' ||
+        res.destroyed
+      ) {
+        return;
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream media artifact.', code: 'MEDIA_STREAM_ERROR' });
+      } else {
+        res.destroy();
+      }
+    } finally {
+      if (fh) {
+        try {
+          await fh.close();
+        } catch {
+          // ignore close error
+        }
+      }
+      releaseLease();
     }
-    res.setHeader('Content-Length', String(stat.size));
-    fs.createReadStream(entry.filePath).pipe(res);
   });
 
   app.all('/api/*', (_req: Request, res: Response) => {
-    res.status(404).json({ error: 'API route not found.' });
+    res.status(404).json({ error: 'API route not found.', code: 'NOT_FOUND' });
+  });
+
+  // Audit M14: Bounded JSON error boundary for malformed JSON, oversized payloads, and unhandled API errors.
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+    if (req.path.startsWith('/api')) {
+      const mapped = mapExpressErrorToJson(err, [ROOT, SESSIONS_ROOT, TMP_ROOT, HOME_DIR]);
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+    next(err);
   });
 
   if (process.env.NODE_ENV !== 'production') {
@@ -2003,12 +2417,17 @@ async function startServer() {
   }
 
   const port = Number(process.env.PORT || 3000);
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`SpectraCraft Rust-backed workbench listening on http://0.0.0.0:${port}`);
+  app.listen(port, bindHost, () => {
+    console.log(
+      `SpectraCraft Rust-backed workbench listening on http://${bindHost}:${port}${
+        workspaceLease.isolated ? ` (isolated workspace: ${SESSIONS_ROOT})` : ''
+      }`,
+    );
   });
 }
 
 startServer().catch((err) => {
+  workspaceLease.release();
   console.error('Failed to start SpectraCraft server:', err);
   process.exit(1);
 });

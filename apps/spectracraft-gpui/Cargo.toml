@@ -1,0 +1,20 @@
+[workspace]
+
+[package]
+name = "spectracraft-gpui"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Experimental native GPUI desktop frontend for SpectraCraft over shared spectracraft-mono operations"
+
+[dependencies]
+# Pinned to exact verified Zed snapshot rev (Apache-2.0 for gpui and gpui_platform).
+# Isolated in this workspace so root Cargo.lock stays 100% GPUI-free.
+gpui = { git = "https://github.com/zed-industries/zed", rev = "ed8dc1b6ca115f3ce70117ebb448dfb61ea030bf" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "ed8dc1b6ca115f3ce70117ebb448dfb61ea030bf" }
+image = { version = "0.25.1", default-features = false }
+smallvec = "1.6"
+spectracraft-mono = { path = "../../spectracraft-mono", default-features = false, features = ["playback", "dialogs"] }
+
+[dev-dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", rev = "ed8dc1b6ca115f3ce70117ebb448dfb61ea030bf", features = ["test-support"] }

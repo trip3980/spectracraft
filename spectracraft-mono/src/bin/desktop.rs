@@ -1,6 +1,6 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
-use rustfft::{num_complex::Complex32, FftPlanner};
 use serde::{Deserialize, Serialize};
+use spectracraft_mono::app_session::sha256_f32_slice;
 use spectracraft_mono::capture::{
     self, DryReviewStatus, ExportVariant, Recording, StudioPrediction,
 };
@@ -15,7 +15,10 @@ use spectracraft_mono::studio_catalog::{
     self, GridDirection, MicAim, MicEntry, Pattern, RoomPreset, SourceCategory, SourceEntry,
     SourceRadiation, SourceSymbol, StudioRig, SurfaceEntry, Unit, BANDS_HZ, FACE_LABELS,
 };
-use spectracraft_mono::{analyze_with_texture, synthesize, write_wav};
+use spectracraft_mono::visualization::{
+    measure_peaks, spectrum_color_rgb, Peaks, Spectrum, Visual, SPECTRUM_BOTTOM, SPECTRUM_H,
+};
+use spectracraft_mono::{analyze_with_texture, digest, synthesize, write_wav};
 use spectracraft_mono::{edge, workspace};
 use std::{
     borrow::Cow,
@@ -28,9 +31,6 @@ use std::{
 };
 
 const MAX_EXCERPT_SECS: f64 = 30.0;
-const SPECTRUM_H: usize = 144;
-const SPECTRUM_BOTTOM: f32 = -90.0;
-const SPECTRUM_TOP: f32 = 0.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Take {
@@ -151,160 +151,20 @@ impl AppState {
     }
 }
 
-type Peaks = Vec<(f32, f32)>;
-fn measure_peaks(wave: &[f32]) -> Peaks {
-    if wave.is_empty() {
-        return Vec::new();
-    }
-    let n = wave.len().min(2048);
-    (0..n)
-        .map(|i| {
-            let a = i * wave.len() / n;
-            let b = ((i + 1) * wave.len() / n).max(a + 1).min(wave.len());
-            wave[a..b]
-                .iter()
-                .fold((0_f32, 0_f32), |(lo, hi), &v| (lo.min(v), hi.max(v)))
-        })
-        .collect()
+fn spectrum_color(dbfs: f32) -> Color32 {
+    let [r, g, b] = spectrum_color_rgb(dbfs);
+    Color32::from_rgb(r, g, b)
 }
 
-fn to_dbfs(amplitude: f32) -> f32 {
-    20. * amplitude.max(1e-10).log10()
+trait SpectrumEguiExt {
+    fn image(&self) -> egui::ColorImage;
 }
 
-struct Spectrum {
-    width: usize,
-    max_hz: f32,
-    nyquist_hz: f32,
-    dbfs: Vec<f32>,
-}
-impl Spectrum {
-    #[cfg(test)]
-    fn measure(wave: &[f32], rate: u32) -> Self {
-        Self::measure_range(wave, rate, 12_000_f32.min(rate as f32 * 0.5))
-    }
-    fn measure_range(wave: &[f32], rate: u32, display_max_hz: f32) -> Self {
-        let nyquist_hz = rate as f32 * 0.5;
-        let max_hz = display_max_hz.max(500.0);
-        if wave.is_empty() {
-            return Self {
-                width: 1,
-                max_hz,
-                nyquist_hz,
-                dbfs: vec![SPECTRUM_BOTTOM; SPECTRUM_H],
-            };
-        }
-        let width = wave
-            .len()
-            .div_ceil((rate as usize / 100).max(1))
-            .clamp(1, 700);
-        let n = (rate as usize / 24).next_power_of_two();
-        let window: Vec<_> = (0..n)
-            .map(|i| 0.5 - 0.5 * (std::f32::consts::TAU * i as f32 / n as f32).cos())
-            .collect();
-        let norm = 2. / window.iter().sum::<f32>();
-        let hz_to_bin = n as f32 / rate as f32;
-        let bands: Vec<Option<std::ops::Range<usize>>> = (0..SPECTRUM_H)
-            .map(|y| {
-                let f_lo = (SPECTRUM_H - 1 - y) as f32 / SPECTRUM_H as f32 * max_hz;
-                let f_hi = (SPECTRUM_H - y) as f32 / SPECTRUM_H as f32 * max_hz;
-                if f_lo >= nyquist_hz {
-                    return None; // Above Nyquist -> no data
-                }
-                let lo = (f_lo * hz_to_bin).ceil() as usize;
-                let hi = (f_hi.min(nyquist_hz) * hz_to_bin).ceil() as usize;
-                let start = lo.min(n / 2);
-                Some(start..hi.max(start + 1).min(n / 2 + 1))
-            })
-            .collect();
-        let mut dbfs = vec![SPECTRUM_BOTTOM; width * SPECTRUM_H];
-        let fft = FftPlanner::<f32>::new().plan_fft_forward(n);
-        let mut block = vec![Complex32::default(); n];
-        let mut scratch = vec![Complex32::default(); fft.get_inplace_scratch_len()];
-        for col in 0..width {
-            let center = ((2 * col + 1) * wave.len()) / (2 * width);
-            for (k, v) in block.iter_mut().enumerate() {
-                let x = (center + k)
-                    .checked_sub(n / 2)
-                    .and_then(|i| wave.get(i))
-                    .copied()
-                    .unwrap_or(0.0);
-                *v = Complex32::new(window[k] * x, 0.0);
-            }
-            fft.process_with_scratch(&mut block, &mut scratch);
-            for (y, maybe_band) in bands.iter().enumerate() {
-                if let Some(band) = maybe_band {
-                    let peak = band
-                        .clone()
-                        .map(|i| {
-                            let endpoint_scale = if i == 0 || i == n / 2 { 0.5 } else { 1. };
-                            block[i].norm() * endpoint_scale
-                        })
-                        .fold(0_f32, f32::max);
-                    dbfs[y * width + col] = to_dbfs(peak * norm);
-                } else {
-                    dbfs[y * width + col] = f32::NAN; // Explicitly marks above-Nyquist no-data
-                }
-            }
-        }
-        Self {
-            width,
-            max_hz,
-            nyquist_hz,
-            dbfs,
-        }
-    }
-    fn color(dbfs: f32) -> Color32 {
-        if !dbfs.is_finite() {
-            return Color32::from_rgb(36, 36, 44);
-        }
-        let colors = [
-            [15., 20., 32.],
-            [28., 66., 115.],
-            [21., 136., 154.],
-            [202., 172., 76.],
-            [255., 248., 213.],
-        ];
-        let a = ((dbfs.clamp(SPECTRUM_BOTTOM, SPECTRUM_TOP) - SPECTRUM_BOTTOM)
-            / (SPECTRUM_TOP - SPECTRUM_BOTTOM))
-            * 4.;
-        let lo = (a.floor() as usize).min(3);
-        let f = a - lo as f32;
-        let c = |i| ((1. - f) * colors[lo][i] + f * colors[lo + 1][i]) as u8;
-        Color32::from_rgb(c(0), c(1), c(2))
-    }
+impl SpectrumEguiExt for Spectrum {
     fn image(&self) -> egui::ColorImage {
         egui::ColorImage {
             size: [self.width, SPECTRUM_H],
-            pixels: self.dbfs.iter().copied().map(Self::color).collect(),
-        }
-    }
-}
-
-struct Visual {
-    peaks: Peaks,
-    spectrum: Spectrum,
-}
-impl Visual {
-    #[cfg(test)]
-    fn measure(wave: &[f32], rate: u32) -> Self {
-        Self::measure_range(wave, rate, 12_000_f32.min(rate as f32 * 0.5))
-    }
-    fn measure_range(wave: &[f32], rate: u32, max_hz: f32) -> Self {
-        Self {
-            peaks: measure_peaks(wave),
-            spectrum: Spectrum::measure_range(wave, rate, max_hz),
-        }
-    }
-    fn peak_dbfs(&self) -> String {
-        let peak = self
-            .peaks
-            .iter()
-            .fold(0_f32, |v, (lo, hi)| v.max(lo.abs()).max(hi.abs()));
-        if peak == 0. {
-            "silence".to_owned()
-        } else {
-            format!("{:+.1} dBFS peak", to_dbfs(peak))
+            pixels: self.dbfs.iter().copied().map(spectrum_color).collect(),
         }
     }
 }
@@ -730,11 +590,22 @@ impl PartialEq for StudioSnapshot {
     }
 }
 
+
 /// Serializable SpectraCraft studio session file (`.spectracraft.json`), written atomically.
+/// Version 2 records source/dry provenance and revision-bound approval; Version 1 is loaded
+/// explicitly as a settings-only preset without carrying over dry-review approval (Audit H6).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StudioSessionFile {
     version: u32,
+    #[serde(default)]
+    source_path: Option<String>,
+    #[serde(default)]
+    source_sha256: Option<String>,
+    #[serde(default)]
+    dry_sha256: Option<String>,
+    #[serde(default)]
+    approved_dry_sha256: Option<String>,
     rig: StudioRig,
     voicing: VoicingControls,
     mic_enabled: bool,
@@ -957,8 +828,17 @@ struct Studio {
     plugin_slot: PluginSlotConfig,
     last_pipeline_summary: Option<pipeline::PipelineStageSummary>,
 
-    // Session persistence path
+    // Session persistence & source provenance (Audit H6)
     session_path: Option<PathBuf>,
+    source_path: Option<PathBuf>,
+    approved_dry_sha256: Option<String>,
+
+    // Background post-dry worker with monotonic revision coalescing (Audit M4)
+    post_dry_job_rev: u64,
+    post_dry_worker: Option<(
+        u64,
+        mpsc::Receiver<(PostDryPipelineConfig, [usize; 2], pipeline::PipelineRenderOutput)>,
+    )>,
 
     // Viewport texture cache key: (view_start_ms, view_end_ms, display_max_hz_i32, rev)
     plot_cache_key: Option<(u64, u64, i32, u64)>,
@@ -1054,6 +934,10 @@ impl Studio {
             plugin_slot: PluginSlotConfig::default(),
             last_pipeline_summary: None,
             session_path: None,
+            source_path: None,
+            approved_dry_sha256: None,
+            post_dry_job_rev: 0,
+            post_dry_worker: None,
             plot_cache_key: None,
             plot_revision: 0,
             original_texture: None,
@@ -1092,6 +976,7 @@ impl Studio {
             mic_enabled: self.mic_enabled,
             room_enabled: self.room_enabled,
             rig,
+            preamp_drive: 0.0,
             plugin_slot: self.plugin_slot.clone(),
         }
     }
@@ -1124,6 +1009,7 @@ impl Studio {
         studio_catalog::AcousticFingerprint,
         bool,
         bool,
+        i32,
         bool,
         PluginId,
         i32,
@@ -1131,10 +1017,12 @@ impl Studio {
         i32,
         i32,
     ) {
+        let cfg = self.post_dry_config();
         (
             self.rig.acoustic_fingerprint(),
             self.mic_enabled,
             self.room_enabled,
+            (cfg.preamp_drive * 1000.0).round() as i32,
             self.plugin_slot.enabled,
             self.plugin_slot.plugin_id,
             (self.plugin_slot.eq_low_db * 100.0).round() as i32,
@@ -1234,9 +1122,50 @@ impl Studio {
         }
     }
 
+    /// Clear human dry-review approval whenever dry audio changes (Audit H5).
+    fn invalidate_dry_review(&mut self) {
+        self.dry_checklist = DryListeningChecklist::default();
+        self.dry_review = DryReviewStatus::NotReviewed;
+        self.approved_dry_sha256 = None;
+        self.applied_rig = None;
+        self.last_pipeline_summary = None;
+    }
+
+    /// Synchronize dry review status from checklist and bind approval strictly to current dry SHA-256.
+    fn sync_dry_review_from_checklist(&mut self) {
+        let next = self.dry_checklist.sync_status();
+        self.dry_review = next;
+        self.approved_dry_sha256 = if next == DryReviewStatus::ApprovedByHuman {
+            self.track
+                .as_ref()
+                .and_then(|t| t.dry.as_deref())
+                .map(sha256_f32_slice)
+        } else {
+            None
+        };
+    }
+
     fn save_session(&mut self, path: &Path) -> Result<(), String> {
+        let source_sha256 = self.track.as_ref().map(|t| sha256_f32_slice(&t.original));
+        let dry_sha256 = self
+            .track
+            .as_ref()
+            .and_then(|t| t.dry.as_deref())
+            .map(sha256_f32_slice);
+        let approved_dry_sha256 = if self.dry_review == DryReviewStatus::ApprovedByHuman {
+            dry_sha256.clone()
+        } else {
+            None
+        };
         let session = StudioSessionFile {
-            version: 1,
+            version: 2,
+            source_path: self
+                .source_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned()),
+            source_sha256,
+            dry_sha256,
+            approved_dry_sha256,
             rig: self.rig.clone(),
             voicing: self.voicing.clone(),
             mic_enabled: self.mic_enabled,
@@ -1253,7 +1182,7 @@ impl Studio {
         pipeline::write_bytes_atomic(path, &bytes).map_err(|e| e.to_string())?;
         self.session_path = Some(path.to_path_buf());
         self.status = format!(
-            "Saved SpectraCraft session atomically to {}.",
+            "Saved SpectraCraft v2 session with provenance atomically to {}.",
             path.display()
         );
         Ok(())
@@ -1266,13 +1195,29 @@ impl Studio {
         }
         let session: StudioSessionFile =
             serde_json::from_slice(&bytes).map_err(|e| format!("Invalid session JSON: {e}"))?;
-        if session.version != 1 {
+        if session.version != 1 && session.version != 2 {
             return Err(format!("Unsupported session version {}.", session.version));
         }
+        let mut loaded_rig = session.rig;
+        loaded_rig.clamp_all();
+        loaded_rig
+            .validate(self.sources.len(), self.mics.len(), self.surfaces.len())
+            .map_err(|e| format!("Session rig validation failed: {e}"))?;
+
+        let current_source_sha = self.track.as_ref().map(|t| sha256_f32_slice(&t.original));
+        let current_dry_sha = self
+            .track
+            .as_ref()
+            .and_then(|t| t.dry.as_deref())
+            .map(sha256_f32_slice);
+        let source_mismatch = session.version == 2
+            && session.source_sha256.is_some()
+            && current_source_sha.is_some()
+            && session.source_sha256 != current_source_sha;
+
         let before = self.capture_snapshot();
         self.history.push(before);
-        self.rig = session.rig;
-        self.rig.clamp_all();
+        self.rig = loaded_rig;
         self.voicing = session.voicing;
         self.mic_enabled = session.mic_enabled;
         self.room_enabled = session.room_enabled;
@@ -1280,8 +1225,20 @@ impl Studio {
         self.selection = session.selection;
         self.marquee_hz = session.marquee_hz;
         self.region_edit_draft = session.region_edit_draft;
-        self.dry_checklist = session.dry_checklist;
-        self.dry_review = self.dry_checklist.sync_status();
+
+        // Only restore dry approval if v2 provenance matches the exact loaded dry PCM SHA-256 (Audit H5/H6).
+        let approval_matches_active_dry = session.version == 2
+            && !source_mismatch
+            && session.approved_dry_sha256.is_some()
+            && session.approved_dry_sha256 == current_dry_sha;
+        if approval_matches_active_dry {
+            self.dry_checklist = session.dry_checklist;
+            self.dry_review = self.dry_checklist.sync_status();
+            self.approved_dry_sha256 = session.approved_dry_sha256;
+        } else {
+            self.invalidate_dry_review();
+        }
+
         self.canvas_mode = session.canvas_mode;
         self.display_max_hz = session.display_max_hz.clamp(1_000.0, 48_000.0);
         self.session_path = Some(path.to_path_buf());
@@ -1289,7 +1246,19 @@ impl Studio {
         if self.track.as_ref().is_some_and(|t| t.dry.is_some()) {
             self.sync_post_dry_immediate(ctx);
         }
-        self.status = format!("Loaded SpectraCraft session from {}.", path.display());
+        self.status = if session.version == 1 {
+            format!(
+                "Loaded legacy v1 settings preset from {} (dry review reset; open/regenerate source audio explicitly).",
+                path.display()
+            )
+        } else if source_mismatch {
+            format!(
+                "Loaded v2 rig/settings from {} with WARNING: source audio SHA-256 differs from session provenance (dry approval cleared).",
+                path.display()
+            )
+        } else {
+            format!("Loaded SpectraCraft v2 session from {}.", path.display())
+        };
         Ok(())
     }
 
@@ -1536,7 +1505,7 @@ impl Studio {
             }
             StudioCommand::SetDryChecklist(checklist) => {
                 self.dry_checklist = checklist;
-                self.dry_review = self.dry_checklist.sync_status();
+                self.sync_dry_review_from_checklist();
                 Ok(())
             }
             StudioCommand::RunPostDryPipeline => {
@@ -1890,6 +1859,9 @@ impl Studio {
     fn load(&mut self, path: PathBuf, ctx: &egui::Context) {
         self.status = format!("Opening {}…", path.display());
         self.app_state = AppState::Loading;
+        self.source_path = Some(path.clone());
+        self.post_dry_job_rev = self.post_dry_job_rev.wrapping_add(1);
+        self.post_dry_worker = None;
         self.stop();
         let Some((_, cancel, tx)) = self.begin_job(true) else {
             return;
@@ -2074,9 +2046,10 @@ impl Studio {
                 }
                 self.last_region_edit = None;
                 self.region_preview = RegionPreviewMode::Off;
+                self.invalidate_dry_review();
                 self.sync_post_dry_immediate(ctx);
                 self.status = format!(
-                    "Stage 1 dry take re-voiced for '{}' from cached shape (original untouched).",
+                    "Stage 1 dry take re-voiced for '{}' from cached shape (original untouched; dry review reset).",
                     source.name
                 );
             }
@@ -2149,17 +2122,19 @@ impl Studio {
             t.dry = Some(Arc::from(out.edited_dry));
         }
         self.last_region_edit = Some(report);
+        self.invalidate_dry_review();
         self.sync_post_dry_immediate(ctx);
         self.status = format!(
-            "Stage 2 surgical edit ({:?}) applied to dry take ({} note(s), outside bit-identical: {}).",
+            "Stage 2 surgical edit ({:?}) applied to dry take ({} note(s), outside bit-identical: {}; dry review reset).",
             out.effective_action, out.affected_notes, out.outside_bit_identical
         );
         Ok(())
     }
 
-    /// Synchronously synchronize `t.rebuilt` from `t.dry` via Stages 3, 4, 5 (`pipeline::run_post_dry_pipeline`).
-    /// When all post-dry stages are bypassed, output is bit-identical to `t.dry` even before review approval;
-    /// when any post-dry stage is active and dry review is approved, renders through `pipeline::run_post_dry_pipeline`.
+    /// Synchronize `t.rebuilt` from `t.dry` via Stages 3, 4, 5 (`pipeline::run_post_dry_pipeline`).
+    /// When all post-dry stages are bypassed (or dry review is unapproved), updates immediately with
+    /// zero DSP cost; when active post-dry DSP is enabled, dispatches to a background worker thread
+    /// with monotonic revision coalescing so heavy FDN/mic rendering never blocks the egui thread (Audit M4).
     fn sync_post_dry_immediate(&mut self, ctx: &egui::Context) {
         let Some(t) = self.track.as_ref() else {
             return;
@@ -2191,6 +2166,40 @@ impl Studio {
             cfg.clone()
         };
 
+        let effective_active = effective_cfg.mic_enabled
+            || effective_cfg.room_enabled
+            || (effective_cfg.plugin_slot.enabled
+                && effective_cfg.plugin_slot.plugin_id != PluginId::None);
+
+        // Invalidate any in-flight background post-dry render before dispatching/applying
+        self.post_dry_job_rev = self.post_dry_job_rev.wrapping_add(1);
+        let rev = self.post_dry_job_rev;
+
+        if effective_active {
+            // Off-UI-thread background render with revision coalescing (Audit M4)
+            let (tx, rx) = mpsc::channel();
+            self.post_dry_worker = Some((rev, rx));
+            let sources = self.sources.clone();
+            let mics = self.mics.clone();
+            let surfaces = self.surfaces.clone();
+            let ctx_bg = ctx.clone();
+            std::thread::spawn(move || {
+                let out = pipeline::run_post_dry_pipeline(
+                    &dry,
+                    rate,
+                    &effective_cfg,
+                    &sources,
+                    &mics,
+                    &surfaces,
+                );
+                let _ = tx.send((effective_cfg, span, out));
+                ctx_bg.request_repaint();
+            });
+            return;
+        }
+
+        // Fast bypass path: bit-identical copy of dry take, zero DSP blocking
+        self.post_dry_worker = None;
         let out = pipeline::run_post_dry_pipeline(
             &dry,
             rate,
@@ -2199,6 +2208,17 @@ impl Studio {
             &self.mics,
             &self.surfaces,
         );
+        self.apply_post_dry_output(effective_cfg, span, out, any_post_active, ctx);
+    }
+
+    fn apply_post_dry_output(
+        &mut self,
+        effective_cfg: PostDryPipelineConfig,
+        span: [usize; 2],
+        out: pipeline::PipelineRenderOutput,
+        any_post_active: bool,
+        ctx: &egui::Context,
+    ) {
         let was_playing = self.play.is_some();
         let keep_cursor = self.cursor;
         if was_playing && self.take != Take::Original {
@@ -2342,6 +2362,25 @@ impl Studio {
     }
 
     fn poll(&mut self, ctx: &egui::Context) {
+        // Drain background post-dry worker completions, discarding stale revisions (Audit M4).
+        let completed_post = if let Some((rev, rx)) = &self.post_dry_worker {
+            match rx.try_recv() {
+                Ok(payload) => Some((*rev, Ok(payload))),
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(mpsc::TryRecvError::Disconnected) => Some((*rev, Err(()))),
+            }
+        } else {
+            None
+        };
+        if let Some((rev, res)) = completed_post {
+            self.post_dry_worker = None;
+            if rev == self.post_dry_job_rev {
+                if let Ok((cfg, span, out)) = res {
+                    self.apply_post_dry_output(cfg, span, out, true, ctx);
+                }
+            }
+        }
+
         let (job_id, result) = {
             let Some((id, rx)) = &self.job else {
                 return;
@@ -2381,8 +2420,15 @@ impl Studio {
                 self.region_preview = RegionPreviewMode::Off;
                 self.last_pipeline_summary = None;
                 self.applied_rig = None;
-                self.dry_checklist = DryListeningChecklist::default();
-                self.dry_review = DryReviewStatus::NotReviewed;
+                let channel_note = if t.recording.channels > 1 {
+                    format!(
+                        " [{} ch source folded equally to mono for analysis]",
+                        t.recording.channels
+                    )
+                } else {
+                    String::new()
+                };
+                self.invalidate_dry_review();
                 self.track = Some(t);
                 self.cursor = 0.;
                 self.take = Take::Original;
@@ -2391,10 +2437,12 @@ impl Studio {
                 self.app_state = AppState::Ready;
                 self.status = if dur > MAX_EXCERPT_SECS {
                     format!(
-                        "Loaded long recording ({dur:.2} s). Navigate full overview; drag any <= 30 s excerpt to regenerate."
+                        "Loaded long recording ({dur:.2} s){channel_note}. Navigate full overview; drag any <= 30 s excerpt to regenerate."
                     )
                 } else {
-                    "Loaded. Ready for Stage 1 dry regeneration or editable layers.".into()
+                    format!(
+                        "Loaded{channel_note}. Ready for Stage 1 dry regeneration or editable layers."
+                    )
                 };
                 self.refresh_viewport_visuals(ctx);
             }
@@ -2465,6 +2513,7 @@ impl Studio {
                     t.rebuilt_span = Some(span);
                     t.dry = Some(Arc::from(w));
                 }
+                self.invalidate_dry_review();
                 self.app_state = AppState::Ready;
                 self.sync_post_dry_immediate(ctx);
             }
@@ -3423,7 +3472,7 @@ fn spectrum_plot_panel(
         egui::Sense::click_and_drag(),
     );
     let r = resp.rect;
-    painter.rect_filled(r, 3., Spectrum::color(SPECTRUM_BOTTOM));
+    painter.rect_filled(r, 3., spectrum_color(SPECTRUM_BOTTOM));
     painter.rect_stroke(
         r,
         3.,
@@ -3656,7 +3705,7 @@ fn spectrum_legend(ui: &mut egui::Ui) {
             p.rect_filled(
                 Rect::from_min_max(Pos2::new(a, r.rect.top()), Pos2::new(b, r.rect.bottom())),
                 0.,
-                Spectrum::color(SPECTRUM_BOTTOM + i as f32 * 90. / 65.),
+                spectrum_color(SPECTRUM_BOTTOM + i as f32 * 90. / 65.),
             );
         }
         ui.label("0 dBFS");
@@ -4054,14 +4103,14 @@ impl Studio {
                 .get(self.rig.source_index)
                 .map_or("Unspecified", |s| s.name.as_str());
             if let Some(p) = lib
-                .instruments
+                .instrument_families
                 .iter()
                 .find(|ip| {
                     src_name
                         .to_ascii_lowercase()
-                        .contains(&ip.family.to_ascii_lowercase())
+                        .contains(&ip.id.to_ascii_lowercase())
                 })
-                .or_else(|| lib.instruments.first())
+                .or_else(|| lib.instrument_families.first())
             {
                 ui.small(format!(
                     "Loose reference ({}): guides reshaping only — never replaces performance shape or blends original PCM.",
@@ -5321,6 +5370,7 @@ impl Studio {
             studio_catalog::AcousticFingerprint,
             bool,
             bool,
+            i32,
             bool,
             PluginId,
             i32,
@@ -5484,7 +5534,7 @@ impl Studio {
                 )
                 .changed();
             if changed {
-                self.dry_review = self.dry_checklist.sync_status();
+                self.sync_dry_review_from_checklist();
             }
             ui.separator();
             ui.checkbox(&mut self.show_layers_panel, "Editable analysis layers");
@@ -6760,7 +6810,7 @@ mod tests {
             .image()
             .pixels
             .iter()
-            .all(|&c| c == Spectrum::color(SPECTRUM_BOTTOM)));
+            .all(|&c| c == spectrum_color(SPECTRUM_BOTTOM)));
         // Display above Nyquist (24 kHz for 48 kHz audio -> ask for 32 kHz) marks top rows NaN ("No data")
         let over = Spectrum::measure_range(&x, 48000, 32_000.0);
         assert!(
@@ -7344,5 +7394,65 @@ mod layer_tests {
             .audition_slice_with_options(Take::Difference, true, PreviewBitDepth::Float32, 25, Some(55))
             .unwrap();
         assert_eq!(slice_diff, full_diff[25..55]);
+    }
+
+    #[test]
+    fn desktop_session_v2_rejects_stale_approval_on_mismatched_source_and_handles_v1_presets() {
+        let ctx = egui::Context::default();
+        let mut app = Studio::new();
+        let orig_a = vec![0.25_f32; 4800];
+        let dry_a = vec![0.20_f32; 4800];
+        app.track = Some(Track {
+            name: "take_a.wav".into(),
+            rate: 48_000,
+            overview_peaks: measure_peaks(&orig_a),
+            original_view: Visual::measure(&orig_a, 48_000),
+            regenerated_view: None,
+            difference_view: None,
+            original: orig_a.into(),
+            rebuilt_span: Some([0, 4800]),
+            rebuilt: Some(dry_a.clone()),
+            dry: Some(Arc::from(dry_a)),
+            layer_plot_only: None,
+            recording: Recording {
+                channels: 1,
+                left_minus_right_db: None,
+                lr_similarity: None,
+            },
+            layers: None,
+            guitar_cues: None,
+        });
+        app.dry_checklist = DryListeningChecklist {
+            rhythm: true,
+            phrasing: true,
+            dynamics: true,
+            sustain: true,
+            artifact_free: true,
+        };
+        app.sync_dry_review_from_checklist();
+        assert_eq!(app.dry_review, DryReviewStatus::ApprovedByHuman);
+        assert!(app.approved_dry_sha256.is_some());
+
+        let tmp = std::env::temp_dir().join("spectracraft_audit_h6_session.json");
+        app.save_session(&tmp).expect("v2 session saves");
+
+        // Loading on the SAME source + dry preserves approval
+        app.invalidate_dry_review();
+        assert_eq!(app.dry_review, DryReviewStatus::NotReviewed);
+        app.load_session(&tmp, &ctx).expect("v2 session reloads");
+        assert_eq!(app.dry_review, DryReviewStatus::ApprovedByHuman);
+
+        // Switching to a different source audio clears approval on load
+        let orig_b = vec![-0.4_f32; 4800];
+        let dry_b = vec![-0.3_f32; 4800];
+        if let Some(t) = app.track.as_mut() {
+            t.original = orig_b.into();
+            t.dry = Some(Arc::from(dry_b));
+        }
+        app.load_session(&tmp, &ctx)
+            .expect("v2 session loads settings with source mismatch warning");
+        assert_eq!(app.dry_review, DryReviewStatus::NotReviewed);
+        assert!(app.status.contains("WARNING"));
+        let _ = std::fs::remove_file(&tmp);
     }
 }

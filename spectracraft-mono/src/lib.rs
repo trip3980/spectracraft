@@ -1,5 +1,7 @@
 pub mod acoustic_math;
 pub mod acoustics_physics;
+pub mod app_jobs;
+pub mod app_session;
 pub mod attack_guard;
 #[cfg(feature = "bench")]
 pub mod bench;
@@ -30,11 +32,13 @@ pub mod research_diagnostics;
 pub mod room_bench;
 pub mod settings_store;
 pub mod shape_profile;
+pub mod source_qualification;
 pub mod string_state;
 pub mod studio_catalog;
 pub mod technical_report;
 pub mod translation_layer;
 pub mod update_manager;
+pub mod visualization;
 pub mod workspace;
 use rustfft::{num_complex::Complex, FftPlanner};
 use serde::{Deserialize, Serialize};
@@ -425,30 +429,101 @@ pub fn render_wav(model: &Model, seed: u64, path: &Path) -> Result<f32> {
     write_wav(model.sample_rate, &y, path)
 }
 
-pub fn write_wav(rate: u32, y: &[f32], path: &Path) -> Result<f32> {
-    if !valid_rate(rate) || y.is_empty() || y.iter().any(|v| !v.is_finite()) {
+fn write_wav_atomic_no_overwrite(rate: u32, y: &[f32], gain: f32, path: &Path) -> Result<f32> {
+    if !valid_rate(rate) || y.is_empty() || !gain.is_finite() || y.iter().any(|v| !v.is_finite()) {
         return Err("Invalid output signal".into());
     }
-    let peak = y.iter().map(|x| x.abs()).fold(0_f32, f32::max);
-    let gain = if peak > 0.89 { 0.89 / peak } else { 1. };
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
-    let mut out = hound::WavWriter::new(
-        std::io::BufWriter::new(file),
-        hound::WavSpec {
-            channels: 1,
-            sample_rate: rate,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
-        },
-    )?;
-    for x in y {
-        out.write_sample(x * gain)?;
+    if path.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "Destination WAV already exists",
+        )
+        .into());
     }
-    out.finalize()?;
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let stem = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("export.wav");
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp_path = parent.join(format!(".{stem}.tmp-{pid}-{nanos}"));
+
+    let write_res: Result<()> = (|| {
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)?;
+        let mut out = hound::WavWriter::new(
+            std::io::BufWriter::new(file),
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: rate,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            },
+        )?;
+        for &x in y {
+            out.write_sample(x * gain)?;
+        }
+        out.finalize()?;
+        // Sync temp file before publishing so interrupted writes never leave a partial WAV.
+        let sync_file = std::fs::File::open(&tmp_path)?;
+        let _ = sync_file.sync_all();
+        // Atomic no-overwrite publish via hard_link (fails cleanly with AlreadyExists if raced).
+        match std::fs::hard_link(&tmp_path, path) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                Ok(())
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(e.into()),
+            Err(_) => {
+                // Fallback for filesystems without hard links (e.g. FAT32): re-check then rename.
+                if path.exists() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        "Destination WAV already exists",
+                    )
+                    .into());
+                }
+                std::fs::rename(&tmp_path, path)?;
+                Ok(())
+            }
+        }
+    })();
+
+    if let Err(err) = write_res {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(err);
+    }
     Ok(gain)
+}
+
+/// Write mono 32-bit IEEE float WAV preserving exact samples (gain = 1.0) with atomic
+/// no-overwrite publication so interrupted writes never leave partial files on disk.
+pub fn write_wav(rate: u32, y: &[f32], path: &Path) -> Result<f32> {
+    write_wav_atomic_no_overwrite(rate, y, 1.0, path)
+}
+
+/// Explicitly normalize peaks above `target_peak` before writing a mono 32-bit float WAV
+/// with atomic no-overwrite publication.
+pub fn write_wav_normalized(rate: u32, y: &[f32], path: &Path, target_peak: f32) -> Result<f32> {
+    if !target_peak.is_finite() || target_peak <= 0.0 || target_peak > 1.0 {
+        return Err("target_peak must be in (0.0, 1.0]".into());
+    }
+    let peak = y.iter().map(|x| x.abs()).fold(0_f32, f32::max);
+    let gain = if peak > target_peak {
+        target_peak / peak
+    } else {
+        1.0
+    };
+    write_wav_atomic_no_overwrite(rate, y, gain, path)
 }
 
 #[cfg(test)]
@@ -570,4 +645,44 @@ mod tests {
         // 601 s rejected without u32 overflow
         assert!(validate_wav_spec(valid_long, 96_000 * 601, 600, true).is_err());
     }
+
+    #[test]
+    fn write_wav_preserves_float32_samples_atomically_without_auto_normalization() {
+        let dir = std::env::temp_dir().join(format!(
+            "spectracraft-lib-wav-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let raw_path = dir.join("exact-float32.wav");
+        let norm_path = dir.join("normalized-float32.wav");
+        let _ = std::fs::remove_file(&raw_path);
+        let _ = std::fs::remove_file(&norm_path);
+
+        let samples = vec![0.0_f32, 0.95, -0.98, 1.02, -0.50, 0.25];
+        let gain = write_wav(48_000, &samples, &raw_path).unwrap();
+        assert_eq!(gain, 1.0, "ordinary float32 write_wav must not rescale");
+
+        let mut reader = hound::WavReader::open(&raw_path).unwrap();
+        let read_back: Vec<f32> = reader.samples::<f32>().map(|s| s.unwrap()).collect();
+        assert_eq!(read_back, samples, "written float32 samples must match input bit-for-bit");
+
+        // No-overwrite guarantee
+        assert!(
+            write_wav(48_000, &samples, &raw_path).is_err(),
+            "write_wav must refuse to overwrite an existing WAV"
+        );
+
+        // Explicit opt-in normalization rescales peaks above target_peak
+        let norm_gain = write_wav_normalized(48_000, &samples, &norm_path, 0.89).unwrap();
+        assert!(norm_gain < 1.0);
+        let mut norm_reader = hound::WavReader::open(&norm_path).unwrap();
+        let norm_peak = norm_reader
+            .samples::<f32>()
+            .map(|s| s.unwrap().abs())
+            .fold(0.0_f32, f32::max);
+        assert!((norm_peak - 0.89).abs() < 1e-4, "expected 0.89 peak, got {norm_peak}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
+

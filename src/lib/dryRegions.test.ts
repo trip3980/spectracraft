@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   addDryRegion,
+  beginRegionGesture,
+  cancelRegionGesture,
+  commitRegionGesture,
   createInitialDryRegionHistory,
   deleteDryRegion,
+  previewRegionGesture,
   redoDryRegionHistory,
   serializeDryRegionForRust,
   transformRegionByHandle,
@@ -89,4 +93,64 @@ test('move and resize handles clamp safely inside duration and frequency limits'
   assert.equal(rustPayload.kind, 'marquee');
   assert.equal(rustPayload.start_s, 2.4);
   assert.equal(rustPayload.max_hz, 2000);
+});
+
+test('M5: delete-and-readd produces strictly unique region IDs without collisions', () => {
+  let state = createInitialDryRegionHistory();
+  state = addDryRegion(state, { kind: 'range', startS: 0.5, endS: 1.5 }, 10.0);
+  state = addDryRegion(state, { kind: 'range', startS: 2.0, endS: 3.0 }, 10.0);
+  const [firstId, secondId] = state.regions.map((r) => r.id);
+  assert.notEqual(firstId, secondId);
+
+  // Delete the first region and add a third — ID must NOT collide with firstId or secondId
+  state = deleteDryRegion(state, firstId);
+  state = addDryRegion(state, { kind: 'range', startS: 4.0, endS: 5.0 }, 10.0);
+  const thirdId = state.regions[state.regions.length - 1].id;
+  assert.notEqual(thirdId, firstId);
+  assert.notEqual(thirdId, secondId);
+  assert.equal(new Set(state.regions.map((r) => r.id)).size, 2);
+});
+
+test('M5: multi-frame drag gesture commits as 1 undo step restoring exact start geometry, and cancel restores baseline', () => {
+  let state = createInitialDryRegionHistory();
+  state = addDryRegion(
+    state,
+    { kind: 'marquee', startS: 1.0, endS: 2.0, minHz: 200, maxHz: 1000 },
+    10.0,
+  );
+  const id = state.regions[0].id;
+  const pastCountBeforeDrag = state.past.length;
+
+  // Begin gesture and simulate 5 intermediate drag frames
+  state = beginRegionGesture(state);
+  for (let step = 1; step <= 5; step++) {
+    state = previewRegionGesture(
+      state,
+      id,
+      { startS: 1.0 + step * 0.2, endS: 2.0 + step * 0.2 },
+      10.0,
+    );
+  }
+  assert.equal(state.regions[0].startS, 2.0);
+  assert.equal(state.past.length, pastCountBeforeDrag);
+
+  // Commit produces exactly ONE undo entry whose baseline is the exact start (1.0..2.0)
+  state = commitRegionGesture(state, id, { startS: 2.0, endS: 3.0 }, 10.0);
+  assert.equal(state.past.length, pastCountBeforeDrag + 1);
+  assert.equal(state.regions[0].startS, 2.0);
+
+  // Single undo restores exact pre-drag geometry (1.0..2.0)
+  state = undoDryRegionHistory(state);
+  assert.equal(state.regions[0].startS, 1.0);
+  assert.equal(state.regions[0].endS, 2.0);
+
+  // Begin another gesture and cancel mid-drag -> restores exact baseline without pushing history
+  const pastBeforeCancel = state.past.length;
+  state = beginRegionGesture(state);
+  state = previewRegionGesture(state, id, { startS: 4.5, endS: 5.5 }, 10.0);
+  assert.equal(state.regions[0].startS, 4.5);
+  state = cancelRegionGesture(state);
+  assert.equal(state.regions[0].startS, 1.0);
+  assert.equal(state.regions[0].endS, 2.0);
+  assert.equal(state.past.length, pastBeforeCancel);
 });

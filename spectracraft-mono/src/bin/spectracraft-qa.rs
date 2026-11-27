@@ -248,31 +248,33 @@ fn parse_studio_rig_config(
     sources: &[studio_catalog::SourceEntry],
     mics: &[studio_catalog::MicEntry],
     surfaces: &[studio_catalog::SurfaceEntry],
-) -> studio_catalog::StudioRig {
+) -> Result<studio_catalog::StudioRig> {
     let mut rig = studio_catalog::StudioRig::default();
     if let Some(p) = cfg.get("room_preset").and_then(|v| v.as_str()) {
         rig.apply_preset(parse_room_preset(p));
     }
     if let Some(dims) = cfg.get("dimensions_m").and_then(|v| v.as_array()) {
-        if dims.len() == 3 {
-            rig.dimensions_m = [
-                dims[0].as_f64().unwrap_or(3.048) as f32,
-                dims[1].as_f64().unwrap_or(3.048) as f32,
-                dims[2].as_f64().unwrap_or(3.048) as f32,
-            ];
+        if dims.len() != 3 {
+            return Err("dimensions_m must contain exactly 3 finite numbers".into());
         }
+        rig.dimensions_m = [
+            dims[0].as_f64().ok_or("dimensions_m[0] must be a number")? as f32,
+            dims[1].as_f64().ok_or("dimensions_m[1] must be a number")? as f32,
+            dims[2].as_f64().ok_or("dimensions_m[2] must be a number")? as f32,
+        ];
     }
     if let Some(idx) = cfg.get("source_index").and_then(|v| v.as_u64()) {
-        rig.source_index = (idx as usize).min(sources.len().saturating_sub(1));
+        rig.source_index = idx as usize;
     }
     if let Some(off) = cfg.get("source_offset_m").and_then(|v| v.as_array()) {
-        if off.len() == 3 {
-            rig.source_offset_m = [
-                off[0].as_f64().unwrap_or(0.0) as f32,
-                off[1].as_f64().unwrap_or(0.0) as f32,
-                off[2].as_f64().unwrap_or(0.0) as f32,
-            ];
+        if off.len() != 3 {
+            return Err("source_offset_m must contain exactly 3 finite numbers".into());
         }
+        rig.source_offset_m = [
+            off[0].as_f64().ok_or("source_offset_m[0] must be a number")? as f32,
+            off[1].as_f64().ok_or("source_offset_m[1] must be a number")? as f32,
+            off[2].as_f64().ok_or("source_offset_m[2] must be a number")? as f32,
+        ];
     }
     if let Some(v) = cfg.get("source_lock_center_xy").and_then(|v| v.as_bool()) {
         rig.source_lock_center_xy = v;
@@ -281,73 +283,84 @@ fn parse_studio_rig_config(
         rig.source_lock_height_5ft = v;
     }
     if let Some(faces) = cfg.get("surface_faces").and_then(|v| v.as_array()) {
-        if faces.len() == 6 {
-            for (i, f) in faces.iter().enumerate() {
-                if let Some(sidx) = f.as_u64() {
-                    rig.surface_faces[i] = (sidx as usize).min(surfaces.len().saturating_sub(1));
-                }
-            }
+        if faces.len() != 6 {
+            return Err("surface_faces must contain exactly 6 surface indices".into());
+        }
+        for (i, f) in faces.iter().enumerate() {
+            let sidx = f.as_u64().ok_or("surface_faces entries must be non-negative integers")?;
+            rig.surface_faces[i] = sidx as usize;
         }
     }
     if let Some(t) = cfg.get("temperature_c").and_then(|v| v.as_f64()) {
         rig.temperature_c = t as f32;
     }
     if let Some(mic_arr) = cfg.get("mics").and_then(|v| v.as_array()) {
-        if !mic_arr.is_empty() {
-            let mut parsed = Vec::new();
-            for (mi, mv) in mic_arr.iter().enumerate() {
-                let mut slot = studio_catalog::MicSlot::sm7_baseline();
-                slot.label = mv
-                    .get("label")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| format!("Mic {}", mi + 1));
-                if let Some(ci) = mv.get("catalog_index").and_then(|v| v.as_u64()) {
-                    slot.catalog_index = (ci as usize).min(mics.len().saturating_sub(1));
-                }
-                if let Some(ps) = mv.get("pattern_override").and_then(|v| v.as_str()) {
-                    slot.pattern_override = parse_pattern(ps);
-                }
-                if let Some(off) = mv.get("offset_m").and_then(|v| v.as_array()) {
-                    if off.len() == 3 {
-                        slot.offset_m = [
-                            off[0].as_f64().unwrap_or(0.0) as f32,
-                            off[1].as_f64().unwrap_or(0.6096) as f32,
-                            off[2].as_f64().unwrap_or(0.0) as f32,
-                        ];
-                    }
-                }
-                if let Some(aim) = mv.get("aim") {
-                    slot.aim.tilt_x_deg = aim
-                        .get("tilt_x_deg")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0) as f32;
-                    slot.aim.roll_y_deg = aim
-                        .get("roll_y_deg")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0) as f32;
-                    slot.aim.heading_z_deg = aim
-                        .get("heading_z_deg")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0) as f32;
-                    slot.aim.follow_source = aim
-                        .get("follow_source")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                }
-                if let Some(en) = mv.get("enabled").and_then(|v| v.as_bool()) {
-                    slot.enabled = en;
-                }
-                parsed.push(slot);
-            }
-            rig.mics = parsed;
+        if mic_arr.is_empty() {
+            return Err("StudioRig.mics cannot be empty (at least 1 mic slot is required)".into());
         }
+        if mic_arr.len() > studio_catalog::StudioRig::MAX_MIC_SLOTS {
+            return Err(format!(
+                "StudioRig.mics has {} slots, exceeding maximum {}",
+                mic_arr.len(),
+                studio_catalog::StudioRig::MAX_MIC_SLOTS
+            )
+            .into());
+        }
+        let mut parsed = Vec::with_capacity(mic_arr.len());
+        for (mi, mv) in mic_arr.iter().enumerate() {
+            let mut slot = studio_catalog::MicSlot::sm7_baseline();
+            slot.label = mv
+                .get("label")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("Mic {}", mi + 1));
+            if let Some(ci) = mv.get("catalog_index").and_then(|v| v.as_u64()) {
+                slot.catalog_index = ci as usize;
+            }
+            if let Some(ps) = mv.get("pattern_override").and_then(|v| v.as_str()) {
+                slot.pattern_override = parse_pattern(ps);
+            }
+            if let Some(off) = mv.get("offset_m").and_then(|v| v.as_array()) {
+                if off.len() != 3 {
+                    return Err("mic offset_m must contain exactly 3 finite numbers".into());
+                }
+                slot.offset_m = [
+                    off[0].as_f64().ok_or("mic offset_m[0] must be a number")? as f32,
+                    off[1].as_f64().ok_or("mic offset_m[1] must be a number")? as f32,
+                    off[2].as_f64().ok_or("mic offset_m[2] must be a number")? as f32,
+                ];
+            }
+            if let Some(aim) = mv.get("aim") {
+                slot.aim.tilt_x_deg = aim
+                    .get("tilt_x_deg")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
+                slot.aim.roll_y_deg = aim
+                    .get("roll_y_deg")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
+                slot.aim.heading_z_deg = aim
+                    .get("heading_z_deg")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
+                slot.aim.follow_source = aim
+                    .get("follow_source")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+            }
+            if let Some(en) = mv.get("enabled").and_then(|v| v.as_bool()) {
+                slot.enabled = en;
+            }
+            parsed.push(slot);
+        }
+        rig.mics = parsed;
     }
     if let Some(sel) = cfg.get("selected_mic").and_then(|v| v.as_u64()) {
-        rig.selected_mic = (sel as usize).min(rig.mics.len().saturating_sub(1));
+        rig.selected_mic = sel as usize;
     }
+    rig.validate(sources.len(), mics.len(), surfaces.len())?;
     rig.clamp_all();
-    rig
+    Ok(rig)
 }
 
 fn studio_analysis(config_path: &Path) -> Result<()> {
@@ -355,7 +368,7 @@ fn studio_analysis(config_path: &Path) -> Result<()> {
     let sources = studio_catalog::load_source_catalog_from_disk_or_embedded();
     let mics = studio_catalog::mic_catalog();
     let surfaces = studio_catalog::surface_catalog();
-    let rig = parse_studio_rig_config(&cfg, &sources, &mics, &surfaces);
+    let rig = parse_studio_rig_config(&cfg, &sources, &mics, &surfaces)?;
     let analysis =
         spectracraft_mono::acoustic_math::analyze_studio_rig(&rig, &sources, &mics, &surfaces);
     print_json(&analysis)
@@ -370,7 +383,7 @@ fn studio_capture(input: &Path, config_path: &Path, out: &Path) -> Result<()> {
     let sources = studio_catalog::load_source_catalog_from_disk_or_embedded();
     let mics = studio_catalog::mic_catalog();
     let surfaces = studio_catalog::surface_catalog();
-    let rig = parse_studio_rig_config(&cfg, &sources, &mics, &surfaces);
+    let rig = parse_studio_rig_config(&cfg, &sources, &mics, &surfaces)?;
 
     let max_order = cfg
         .get("max_order")
@@ -378,7 +391,8 @@ fn studio_capture(input: &Path, config_path: &Path, out: &Path) -> Result<()> {
         .unwrap_or(4)
         .clamp(0, 4) as i32;
 
-    // Render all enabled mic slots (or active mic if none explicitly enabled) and sum cleanly
+    // Render all enabled mic slots with physical arrival delay + inverse-distance attenuation +
+    // un-truncated room decay tail. If every mic slot is disabled, emit explicit silence.
     let active_indices: Vec<usize> = rig
         .mics
         .iter()
@@ -386,11 +400,6 @@ fn studio_capture(input: &Path, config_path: &Path, out: &Path) -> Result<()> {
         .filter(|(_, m)| m.enabled)
         .map(|(i, _)| i)
         .collect();
-    let indices = if active_indices.is_empty() {
-        vec![rig.selected_mic.min(rig.mics.len().saturating_sub(1))]
-    } else {
-        active_indices
-    };
 
     let mut primary_plan = studio_catalog::capture_paths_6band(
         &rig,
@@ -398,36 +407,48 @@ fn studio_capture(input: &Path, config_path: &Path, out: &Path) -> Result<()> {
         &mics,
         &surfaces,
         max_order,
-        studio_catalog::Timing::AlignDirect,
+        studio_catalog::Timing::Physical,
     );
-    let mut mixed = vec![0.0_f32; samples.len()];
-    let inv_count = 1.0 / (indices.len() as f32);
-    for (k, &mi) in indices.iter().enumerate() {
-        let mut slot_rig = rig.clone();
-        slot_rig.selected_mic = mi;
-        let plan = studio_catalog::capture_paths_6band(
-            &slot_rig,
-            &sources,
-            &mics,
-            &surfaces,
-            max_order,
-            studio_catalog::Timing::AlignDirect,
-        );
-        if k == 0 || mi == rig.selected_mic {
-            primary_plan = plan.clone();
+    let mut mixed = if active_indices.is_empty() {
+        vec![0.0_f32; samples.len()]
+    } else {
+        let mut rendered_slots: Vec<Vec<f32>> = Vec::with_capacity(active_indices.len());
+        let mut max_len = samples.len();
+        for (k, &mi) in active_indices.iter().enumerate() {
+            let mut slot_rig = rig.clone();
+            slot_rig.selected_mic = mi;
+            let plan = studio_catalog::capture_paths_6band(
+                &slot_rig,
+                &sources,
+                &mics,
+                &surfaces,
+                max_order,
+                studio_catalog::Timing::Physical,
+            );
+            if k == 0 || mi == rig.selected_mic {
+                primary_plan = plan;
+            }
+            let rendered = spectracraft_mono::capture::render_studio_rig_with_tail(
+                &samples,
+                spec.sample_rate,
+                &slot_rig,
+                &sources,
+                &mics,
+                &surfaces,
+                true,
+            );
+            max_len = max_len.max(rendered.len());
+            rendered_slots.push(rendered);
         }
-        let rendered = spectracraft_mono::capture::render_studio_rig(
-            &samples,
-            spec.sample_rate,
-            &slot_rig,
-            &sources,
-            &mics,
-            &surfaces,
-        );
-        for (dst, &v) in mixed.iter_mut().zip(rendered.iter()) {
-            *dst += v * inv_count;
+        let mut sum = vec![0.0_f32; max_len];
+        let inv_count = 1.0 / (rendered_slots.len() as f32);
+        for rendered in rendered_slots {
+            for (dst, &v) in sum.iter_mut().zip(rendered.iter()) {
+                *dst += v * inv_count;
+            }
         }
-    }
+        sum
+    };
 
     // Write captured WAV as 32-bit float atomically via craft-atomic (lossless, preserves headroom)
     let mut peak = 0.0_f64;
@@ -631,7 +652,7 @@ fn pipeline_render(cached_dry_path: &Path, cfg_path: &Path, out: &Path) -> Resul
     let mics = studio_catalog::mic_catalog();
     let surfaces = studio_catalog::surface_catalog();
     let rig_val = cfg.get("rig").unwrap_or(&cfg);
-    let rig = parse_studio_rig_config(rig_val, &sources, &mics, &surfaces);
+    let rig = parse_studio_rig_config(rig_val, &sources, &mics, &surfaces)?;
     let mic_enabled = cfg
         .get("mic_enabled")
         .and_then(|v| v.as_bool())
@@ -697,7 +718,7 @@ fn studio_prompt_render(cues_path: &Path, config_path: &Path, out: &Path) -> Res
     let sources = studio_catalog::load_source_catalog_from_disk_or_embedded();
     let mics = studio_catalog::mic_catalog();
     let surfaces = studio_catalog::surface_catalog();
-    let rig = parse_studio_rig_config(&cfg, &sources, &mics, &surfaces);
+    let rig = parse_studio_rig_config(&cfg, &sources, &mics, &surfaces)?;
     let voicing: spectracraft_mono::reperform::VoicingControls = cfg
         .get("voicing")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -946,6 +967,7 @@ fn export_daw_cmd(
     cues_json: Option<&Path>,
     title: &str,
     bit_depth_raw: &str,
+    engine_state_json: Option<&Path>,
 ) -> Result<()> {
     let target =
         spectracraft_mono::daw_bridge::EditorTarget::from_id(target_id).ok_or_else(|| {
@@ -980,8 +1002,16 @@ fn export_daw_cmd(
         Vec::new()
     };
 
-    let engine = spectracraft_mono::pipeline::AudioPipelineEngine::new(dry_spec.sample_rate)?;
-    let snapshot = engine.snapshot_state();
+    // Never fabricate a default AudioPipelineEngine snapshot when actual render state is absent.
+    let loaded_snapshot: Option<spectracraft_mono::pipeline::EngineStateSnapshot> =
+        if let Some(state_path) = engine_state_json {
+            let raw = std::fs::read_to_string(state_path)?;
+            let mut validator = spectracraft_mono::pipeline::AudioPipelineEngine::new(dry_spec.sample_rate)?;
+            validator.import_state_json(raw.as_bytes())?;
+            Some(validator.snapshot_state())
+        } else {
+            None
+        };
     let stems = [
         spectracraft_mono::daw_bridge::StemTrack {
             name: "Dry Take (Stage 1)",
@@ -1001,8 +1031,12 @@ fn export_daw_cmd(
         target,
         stems: &stems,
         markers: &markers,
-        engine_state: Some(&snapshot),
-        source_signature_note: None,
+        engine_state: loaded_snapshot.as_ref(),
+        source_signature_note: if loaded_snapshot.is_none() {
+            Some("Engine state snapshot was not supplied for this export; no default engine state was fabricated.")
+        } else {
+            None
+        },
     };
     let receipt = spectracraft_mono::daw_bridge::export_for_editor(out_dir, &req)?;
     print_json(&receipt)
@@ -1146,6 +1180,7 @@ fn run() -> Result<()> {
             None,
             "SpectraCraft Session",
             "24",
+            None,
         ),
         ["export-daw", target, dry_wav, final_wav, out_dir, cues_json, title, bit_depth] => {
             let cues_opt = if *cues_json == "-" {
@@ -1161,6 +1196,29 @@ fn run() -> Result<()> {
                 cues_opt,
                 title,
                 bit_depth,
+                None,
+            )
+        }
+        ["export-daw", target, dry_wav, final_wav, out_dir, cues_json, title, bit_depth, engine_state_json] => {
+            let cues_opt = if *cues_json == "-" {
+                None
+            } else {
+                Some(Path::new(cues_json))
+            };
+            let state_opt = if *engine_state_json == "-" {
+                None
+            } else {
+                Some(Path::new(engine_state_json))
+            };
+            export_daw_cmd(
+                target,
+                Path::new(dry_wav),
+                Path::new(final_wav),
+                Path::new(out_dir),
+                cues_opt,
+                title,
+                bit_depth,
+                state_opt,
             )
         }
         ["check-craft-libs"] => {
@@ -1223,6 +1281,40 @@ fn run() -> Result<()> {
         ["reference-shape", input, cues, source_idx] => {
             reference_shape(Path::new(input), Path::new(cues), Some(source_idx.parse()?))
         }
+        ["qualify-sources", manifest, criteria, out_dir] => {
+            let report = spectracraft_mono::source_qualification::run_qualification_campaign(
+                Path::new(manifest),
+                Path::new(criteria),
+                Path::new(out_dir),
+                None,
+            )?;
+            print_json(&report)?;
+            if !report.all_required_automated_passed {
+                return Err(format!(
+                    "Source qualification did not pass all required automated cases (pass={}, fail={}, blocked={}, not_run={})",
+                    report.pass_count, report.fail_count, report.blocked_count, report.not_run_count
+                )
+                .into());
+            }
+            Ok(())
+        }
+        ["qualify-sources", manifest, criteria, out_dir, "--case", case_id] => {
+            let report = spectracraft_mono::source_qualification::run_qualification_campaign(
+                Path::new(manifest),
+                Path::new(criteria),
+                Path::new(out_dir),
+                Some(case_id),
+            )?;
+            print_json(&report)?;
+            if !report.all_required_automated_passed {
+                return Err(format!(
+                    "Source qualification case '{case_id}' did not pass (pass={}, fail={}, blocked={}, not_run={})",
+                    report.pass_count, report.fail_count, report.blocked_count, report.not_run_count
+                )
+                .into());
+            }
+            Ok(())
+        }
         ["spectrogram", input, out] => {
             let (spec, samples) = qa::read_audio(Path::new(input))?;
             if spec.channels != 1 {
@@ -1232,6 +1324,7 @@ fn run() -> Result<()> {
         }
         _ => Err(concat!(
             "Usage: spectracraft-qa stereo INPUT | engineering INPUT | spectrogram INPUT OUTPUT.svg | ",
+            "qualify-sources MANIFEST.json CRITERIA.json OUT_DIR [--case ID] | ",
             "six-note OUTPUT.wav | gap-grid INPUT | gap-corpus INPUT_DIR | compare-pcm LEFT RIGHT | ",
             "hash FILE | audit-migration RETIRED_DIR CRATE | source-inventory CRATE | verify-source CRATE MANIFEST | ",
             "preflight CRATE [PLATFORM core|desktop skip|advisories] | guitar-legacy|guitar-boundaries GUITAR_ROOT | ",

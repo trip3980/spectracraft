@@ -126,14 +126,16 @@ fn bandpass_delta_fft(delta: &[f64], rate: f64, flo: f64, fhi: f64) -> Vec<f64> 
     let bw = (hi - lo).max(1.0);
     let taper = (bw * 0.10).clamp(15.0, 200.0).min(bw * 0.45);
 
+    // Keep raised-cosine taper strictly inside [lo, hi] so deliberate frequency-mask
+    // support never exceeds the user's selected [min_hz, max_hz] bounds.
     let bin_gain = |f: f64| -> f64 {
-        if f < lo - taper || f > hi + taper {
+        if f < lo || f > hi {
             0.0
-        } else if f < lo && taper > 0.0 {
-            let t = (f - (lo - taper)) / taper;
+        } else if taper > 0.0 && f < lo + taper {
+            let t = ((f - lo) / taper).clamp(0.0, 1.0);
             0.5 * (1.0 - (PI * t).cos())
-        } else if f > hi && taper > 0.0 {
-            let t = ((hi + taper) - f) / taper;
+        } else if taper > 0.0 && f > hi - taper {
+            let t = ((hi - f) / taper).clamp(0.0, 1.0);
             0.5 * (1.0 - (PI * t).cos())
         } else {
             1.0
@@ -411,29 +413,51 @@ pub fn apply_dry_region_edit(
         });
     }
 
-    // Configure localized voicing overlay for re-synthesizing the region through the DDSP engine
+    // Zero-strength edits must be strictly bit-identical to cached_dry (no hidden floors).
+    if !strength.is_finite() || strength <= 1e-6 {
+        let slice = cached_dry[start_sample..end_sample].to_vec();
+        return Ok(RegionEditOutput {
+            edited_dry: cached_dry.to_vec(),
+            before_slice: slice.clone(),
+            after_slice: slice,
+            start_sample,
+            end_sample,
+            crossfade_samples: fade_samples,
+            affected_notes: 0,
+            effective_action: eff_action,
+            unresolved_note: None,
+            outside_bit_identical: true,
+        });
+    }
+
+    // Configure localized voicing overlay for re-synthesizing the region through the DDSP engine.
+    // All strength scaling descends continuously toward 0.0 without non-zero lower floors.
     let mut local_voicing = base_voicing.clone();
-    match eff_action {
+    let delta_scale = match eff_action {
         RegionFixAction::Straighten => {
             local_voicing.straighten_mode = if strength > 0.65 {
                 StraightenMode::Moderate
             } else {
                 StraightenMode::Light
             };
+            strength.clamp(0.0, 1.0)
         }
         RegionFixAction::ReduceNoise => {
-            local_voicing.noise_reduction_override = Some((0.65 * strength).clamp(0.2, 0.8));
+            local_voicing.noise_reduction_override = Some((0.65 * strength).clamp(0.0, 0.8));
+            1.0
         }
         RegionFixAction::Smooth => {
-            local_voicing.smooth_hf_override = Some((0.55 * strength).clamp(0.15, 0.75));
+            local_voicing.smooth_hf_override = Some((0.55 * strength).clamp(0.0, 0.75));
+            1.0
         }
         RegionFixAction::Stabilize => {
             if local_voicing.straighten_mode == StraightenMode::Off {
                 local_voicing.straighten_mode = StraightenMode::Light;
             }
+            strength.clamp(0.0, 1.0)
         }
-        RegionFixAction::NoteOnly => {}
-    }
+        RegionFixAction::NoteOnly => strength.clamp(0.0, 1.0),
+    };
 
     // Synthesize fresh localized DDSP candidate strictly from cues (zero original audio!)
     let regen_full = local_perf.synthesize_dry_for_source_with_voicing(source, &local_voicing)?;
@@ -443,7 +467,7 @@ pub fn apply_dry_region_edit(
     let raw_delta: Vec<f64> = (0..region_len)
         .map(|i| {
             let idx = start_sample + i;
-            f64::from(regen_full[idx]) - f64::from(cached_dry[idx])
+            (f64::from(regen_full[idx]) - f64::from(cached_dry[idx])) * delta_scale
         })
         .collect();
     let scoped_delta = match band_bounds {
@@ -667,4 +691,95 @@ mod tests {
             "out-of-band delta energy should be suppressed, got {out_band}"
         );
     }
+
+    #[test]
+    fn zero_strength_region_edit_is_bit_identical_and_scales_continuously() {
+        let sources = crate::studio_catalog::source_catalog();
+        let cello = sources
+            .iter()
+            .find(|s| s.id.contains("cello"))
+            .unwrap_or(&sources[0]);
+        let rate = 48_000_u32;
+        let perf = Performance {
+            rate,
+            samples: rate as usize,
+            hop_s: 0.005,
+            notes: vec![Note {
+                string_id: Some(0),
+                re_picks: None,
+                start: 0.05,
+                end: 0.70,
+                hz: vec![220.0; 131],
+                level_steps: vec![0.25; 131],
+                _accent: None,
+                shape: Shape::default(),
+            }],
+            frame_evidence: vec![],
+        };
+        let base_voicing = VoicingControls::default();
+        let cached_dry = perf
+            .synthesize_dry_for_source_with_voicing(cello, &base_voicing)
+            .unwrap();
+
+        for action in [
+            RegionFixAction::Smooth,
+            RegionFixAction::ReduceNoise,
+            RegionFixAction::Straighten,
+            RegionFixAction::Stabilize,
+        ] {
+            let zero_edit = DryRegionEdit {
+                id: "r-zero".into(),
+                kind: "range".into(),
+                start_s: 0.10,
+                end_s: 0.50,
+                min_hz: None,
+                max_hz: None,
+                note: String::new(),
+                action,
+                strength: 0.0,
+                crossfade_ms: 12.0,
+            };
+            let out_zero =
+                apply_dry_region_edit(&cached_dry, &perf, cello, &base_voicing, &zero_edit)
+                    .unwrap();
+            assert_eq!(
+                out_zero.edited_dry, cached_dry,
+                "zero-strength {action:?} edit must be bit-identical"
+            );
+            assert!(out_zero.outside_bit_identical);
+        }
+
+        let small_edit = DryRegionEdit {
+            id: "r-small".into(),
+            kind: "range".into(),
+            start_s: 0.10,
+            end_s: 0.50,
+            min_hz: None,
+            max_hz: None,
+            note: String::new(),
+            action: RegionFixAction::Smooth,
+            strength: 0.10,
+            crossfade_ms: 12.0,
+        };
+        let large_edit = DryRegionEdit {
+            strength: 0.90,
+            ..small_edit.clone()
+        };
+        let out_small =
+            apply_dry_region_edit(&cached_dry, &perf, cello, &base_voicing, &small_edit).unwrap();
+        let out_large =
+            apply_dry_region_edit(&cached_dry, &perf, cello, &base_voicing, &large_edit).unwrap();
+        let max_delta = |a: &[f32], b: &[f32]| -> f32 {
+            a.iter()
+                .zip(b.iter())
+                .map(|(x, y)| (x - y).abs())
+                .fold(0.0_f32, f32::max)
+        };
+        assert!(
+            max_delta(&cached_dry, &out_small.edited_dry)
+                <= max_delta(&cached_dry, &out_large.edited_dry) + 1e-5,
+            "strength should scale smoothly without non-zero floor jumps"
+        );
+    }
 }
+

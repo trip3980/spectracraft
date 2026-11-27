@@ -27,7 +27,9 @@ rodio = { version = "=0.20.1", default-features = false, optional = true }
 
 [features]
 bench = ["dep:zip", "dep:quick-xml", "dep:claxon", "dep:ebur128"]
-desktop = ["dep:eframe", "dep:rfd", "dep:rodio"]
+playback = ["dep:rodio"]
+dialogs = ["dep:rfd"]
+desktop = ["dep:eframe", "playback", "dialogs"]
 
 [[bin]]
 name = "spectracraft-desktop"

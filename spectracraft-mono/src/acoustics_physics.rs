@@ -512,6 +512,8 @@ pub struct LateRoomFdn {
     predelay: Vec<f64>,
     predelay_pos: usize,
     wet_gain: f64,
+    rt60_max_s: f64,
+    predelay_s: f64,
 }
 
 impl LateRoomFdn {
@@ -606,7 +608,22 @@ impl LateRoomFdn {
             predelay: vec![0.0_f64; predelay_len],
             predelay_pos: 0,
             wet_gain: diffuse_ratio,
+            rt60_max_s: rt_low.max(rt_high),
+            predelay_s,
         })
+    }
+
+    /// Maximum modeled Eyring RT60 across low/high absorption bands (seconds).
+    pub fn max_rt60_seconds(&self) -> f64 {
+        self.rt60_max_s
+    }
+
+    /// Recommended offline decay tail duration (seconds) to reach `-threshold_db`
+    /// (e.g. `threshold_db = 90.0` for `-90 dBFS`), bounded by `max_tail_s`.
+    pub fn recommended_tail_seconds(&self, threshold_db: f64, max_tail_s: f64) -> f64 {
+        let target_db = threshold_db.clamp(24.0, 120.0);
+        let needed = self.predelay_s + self.rt60_max_s * (target_db / 60.0);
+        needed.clamp(0.15, max_tail_s.max(0.5))
     }
 
     /// Process one input sample and return the diffuse late-room contribution ONLY
@@ -730,6 +747,38 @@ pub fn lagrange4_weights(frac: f64) -> [f64; 4] {
     let w_p1 = -(f + 1.0) * f * (f - 2.0) / 2.0;
     let w_p2 = (f + 1.0) * f * (f - 1.0) / 6.0;
     [w_m1, w_0, w_p1, w_p2]
+}
+
+/// 16-tap Hann-windowed sinc fractional-delay weights for `frac` in `[0.0, 1.0)`
+/// across tap offsets `[-7, -6, ..., 0, ..., +8]` around integer delay `d0`.
+/// Preserves flat high-frequency magnitude across 20 Hz..20 kHz on physical direct paths
+/// without the steep >10 kHz droop of 4-tap Lagrange interpolation.
+pub fn sinc16_weights_phase(frac: f64) -> [f64; 16] {
+    let f = frac.clamp(0.0, 1.0);
+    let mut w = [0.0_f64; 16];
+    if f <= 1e-12 {
+        w[7] = 1.0;
+        return w;
+    }
+    let mut sum = 0.0_f64;
+    for (idx, k) in (-7_i32..=8_i32).enumerate() {
+        let d = f64::from(k) - f;
+        let sinc = if d.abs() < 1e-12 {
+            1.0
+        } else {
+            let x = PI * d;
+            x.sin() / x
+        };
+        let win = 0.5 * (1.0 + (PI * d / 8.5).cos());
+        w[idx] = sinc * win;
+        sum += w[idx];
+    }
+    if sum.abs() > 1e-12 {
+        for v in &mut w {
+            *v /= sum;
+        }
+    }
+    w
 }
 
 // ======================= 9. LR4 6-BAND CROSSOVER =======================
@@ -1569,6 +1618,37 @@ mod tests {
         let w = lagrange4_weights(0.37);
         let sum: f64 = w.iter().sum();
         assert!((sum - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sinc16_fractional_delay_preserves_high_frequency_magnitude() {
+        let w0 = sinc16_weights_phase(0.0);
+        assert_eq!(w0[7], 1.0);
+        assert!(w0
+            .iter()
+            .enumerate()
+            .all(|(i, &v)| i == 7 || v.abs() < 1e-15));
+
+        let w = sinc16_weights_phase(0.5);
+        assert!((w.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        // Symmetric around half-sample delay (offsets -7..+8 -> w[i] == w[15-i])
+        for i in 0..8 {
+            assert!((w[i] - w[15 - i]).abs() < 1e-12);
+        }
+        // Evaluate |H(e^{jw})| at 18 kHz / 48 kHz (worst-case frac = 0.5):
+        // 16-tap windowed sinc stays within 0.25 dB while 4-tap Lagrange drops >5 dB.
+        let omega = TAU * 18_000.0 / 48_000.0;
+        let (mut re, mut im) = (0.0_f64, 0.0_f64);
+        for (idx, &wt) in w.iter().enumerate() {
+            let k = idx as f64 - 7.0;
+            re += wt * (omega * k).cos();
+            im -= wt * (omega * k).sin();
+        }
+        let mag_db = 20.0 * (re * re + im * im).sqrt().log10();
+        assert!(
+            mag_db.abs() < 0.25,
+            "16-tap windowed sinc must preserve 18 kHz within 0.25 dB at frac=0.5, got {mag_db:+.3} dB"
+        );
     }
 
     #[test]

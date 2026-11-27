@@ -1,0 +1,4898 @@
+{
+  "schema_version": "1.0.0",
+  "generated_from": "spectracraft-mono/capture-reference/source-profiles-138.json",
+  "baseline_commit": "9fbd775800b039f77cb6c9a901a458a0dadb715a",
+  "source_count": 138,
+  "display_family_count": 11,
+  "renderer_class_count": 17,
+  "policy": "Catalog presence, renderer availability, synthetic-control success, real-recording acceptance, application-surface checks, and human listening review are tracked as strictly separate fields. No row is marked recording-qualified without real-recording evidence, passing technical/musical gates, and explicit human review.",
+  "rows": [
+    {
+      "catalog_index": 0,
+      "catalog_id": "unknown_unknown___unspecified_source",
+      "name": "Unknown / Unspecified Source",
+      "category": "Unknown",
+      "display_family": "Unknown",
+      "symbol": "unknown",
+      "renderer_model_id": "neutral_cue_modal",
+      "renderer_class": "neutral",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 1,
+      "catalog_id": "strings___plucked_&_fretted_electric_guitar__direct___unamped_body_",
+      "name": "Electric Guitar (Direct / Unamped Body)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_electric_string",
+      "renderer_class": "plucked_electric",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 2,
+      "catalog_id": "strings___plucked_&_fretted_electric_guitar__clean_1x12_open_back_combo_",
+      "name": "Electric Guitar (Clean 1x12 Open-Back Combo)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [
+        "real_monniaux_slow_solo_20110108"
+      ],
+      "synthetic_control_cases": [
+        "ctrl_guitar_plucked_arpeggio"
+      ],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5500 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 3,
+      "catalog_id": "strings___plucked_&_fretted_electric_guitar__closed_back_4x12_cab_",
+      "name": "Electric Guitar (Closed-Back 4x12 Cab)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5200 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 4,
+      "catalog_id": "strings___plucked_&_fretted_electric_guitar__7_string_",
+      "name": "Electric Guitar (7-String)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_electric_string",
+      "renderer_class": "plucked_electric",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (62 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 5,
+      "catalog_id": "strings___plucked_&_fretted_electric_guitar__baritone_",
+      "name": "Electric Guitar (Baritone)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_electric_string",
+      "renderer_class": "plucked_electric",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (62 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 6,
+      "catalog_id": "strings___plucked_&_fretted_acoustic_guitar__dreadnought_steel_",
+      "name": "Acoustic Guitar (Dreadnought Steel)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 7,
+      "catalog_id": "strings___plucked_&_fretted_acoustic_guitar__om___auditorium_",
+      "name": "Acoustic Guitar (OM / Auditorium)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 8,
+      "catalog_id": "strings___plucked_&_fretted_acoustic_guitar__parlor_",
+      "name": "Acoustic Guitar (Parlor)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 9,
+      "catalog_id": "strings___plucked_&_fretted_acoustic_guitar__12_string_",
+      "name": "Acoustic Guitar (12-String)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 10,
+      "catalog_id": "strings___plucked_&_fretted_classical_nylon_guitar",
+      "name": "Classical Nylon Guitar",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 11,
+      "catalog_id": "strings___plucked_&_fretted_flamenco_guitar",
+      "name": "Flamenco Guitar",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 12,
+      "catalog_id": "strings___plucked_&_fretted_archtop_jazz_guitar__acoustic_",
+      "name": "Archtop Jazz Guitar (Acoustic)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 13,
+      "catalog_id": "strings___plucked_&_fretted_resonator_guitar",
+      "name": "Resonator Guitar",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 14,
+      "catalog_id": "strings___plucked_&_fretted_bass_guitar__4_string_",
+      "name": "Bass Guitar (4-String)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 15,
+      "catalog_id": "strings___plucked_&_fretted_bass_guitar__5_string_",
+      "name": "Bass Guitar (5-String)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (31 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 16,
+      "catalog_id": "strings___plucked_&_fretted_acoustic_bass_guitar",
+      "name": "Acoustic Bass Guitar",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 17,
+      "catalog_id": "strings___plucked_&_fretted_mandolin__f_style_",
+      "name": "Mandolin (F-Style)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 18,
+      "catalog_id": "strings___plucked_&_fretted_mandola",
+      "name": "Mandola",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 19,
+      "catalog_id": "strings___plucked_&_fretted_banjo__5_string_open_back_",
+      "name": "Banjo (5-String Open-Back)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 20,
+      "catalog_id": "strings___plucked_&_fretted_banjo__resonator_",
+      "name": "Banjo (Resonator)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 21,
+      "catalog_id": "strings___plucked_&_fretted_ukulele__soprano___concert_",
+      "name": "Ukulele (Soprano / Concert)",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 22,
+      "catalog_id": "strings___plucked_&_fretted_concert_pedal_harp",
+      "name": "Concert Pedal Harp",
+      "category": "Instrument",
+      "display_family": "Strings — Plucked & Fretted",
+      "symbol": "guitar",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_plucks",
+        "slides",
+        "bends",
+        "quiet_attacks",
+        "chords",
+        "overlapping_decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (33 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (3136 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 23,
+      "catalog_id": "strings___bowed_violin__solo_",
+      "name": "Violin (Solo)",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_violin_high",
+      "renderer_class": "bowed_high",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (3136 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 24,
+      "catalog_id": "strings___bowed_viola",
+      "name": "Viola",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_cello_low",
+      "renderer_class": "bowed_low",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 25,
+      "catalog_id": "strings___bowed_cello",
+      "name": "Cello",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_cello_low",
+      "renderer_class": "bowed_low",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 26,
+      "catalog_id": "strings___bowed_double_bass__pizzicato_",
+      "name": "Double Bass (Pizzicato)",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 27,
+      "catalog_id": "strings___bowed_double_bass__arco_",
+      "name": "Double Bass (Arco)",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_cello_low",
+      "renderer_class": "bowed_low",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 28,
+      "catalog_id": "strings___bowed_baroque_violin",
+      "name": "Baroque Violin",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_violin_high",
+      "renderer_class": "bowed_high",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2637 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 29,
+      "catalog_id": "strings___bowed_hardanger_fiddle",
+      "name": "Hardanger Fiddle",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_violin_high",
+      "renderer_class": "bowed_high",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2637 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 30,
+      "catalog_id": "strings___bowed_viola_da_gamba",
+      "name": "Viola da Gamba",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_cello_low",
+      "renderer_class": "bowed_low",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (73 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 31,
+      "catalog_id": "strings___bowed_erhu",
+      "name": "Erhu",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_violin_high",
+      "renderer_class": "bowed_high",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1760 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 32,
+      "catalog_id": "strings___bowed_nyckelharpa",
+      "name": "Nyckelharpa",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_violin_high",
+      "renderer_class": "bowed_high",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 33,
+      "catalog_id": "strings___bowed_hurdy_gurdy",
+      "name": "Hurdy-Gurdy",
+      "category": "Instrument",
+      "display_family": "Strings — Bowed",
+      "symbol": "bowed",
+      "renderer_model_id": "bowed_cello_low",
+      "renderer_class": "bowed_low",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_bowing",
+        "bow_changes",
+        "legato",
+        "vibrato",
+        "glissandi",
+        "dynamics",
+        "double_stops"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 34,
+      "catalog_id": "winds___woodwinds_concert_flute__c_",
+      "name": "Concert Flute (C)",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 35,
+      "catalog_id": "winds___woodwinds_piccolo",
+      "name": "Piccolo",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 36,
+      "catalog_id": "winds___woodwinds_alto_flute",
+      "name": "Alto Flute",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 37,
+      "catalog_id": "winds___woodwinds_bass_flute",
+      "name": "Bass Flute",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 38,
+      "catalog_id": "winds___woodwinds_irish_tin_whistle",
+      "name": "Irish Tin Whistle",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2349 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 39,
+      "catalog_id": "winds___woodwinds_soprano_recorder",
+      "name": "Soprano Recorder",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 40,
+      "catalog_id": "winds___woodwinds_alto_recorder",
+      "name": "Alto Recorder",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 41,
+      "catalog_id": "winds___woodwinds_bansuri_bamboo_flute",
+      "name": "Bansuri Bamboo Flute",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 42,
+      "catalog_id": "winds___woodwinds_shakuhachi",
+      "name": "Shakuhachi",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1760 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 43,
+      "catalog_id": "winds___woodwinds_pan_flute",
+      "name": "Pan Flute",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_flute",
+      "renderer_class": "woodwind_flute",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 44,
+      "catalog_id": "winds___woodwinds_oboe",
+      "name": "Oboe",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 45,
+      "catalog_id": "winds___woodwinds_english_horn__cor_anglais_",
+      "name": "English Horn (Cor Anglais)",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 46,
+      "catalog_id": "winds___woodwinds_bb_clarinet",
+      "name": "Bb Clarinet",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 47,
+      "catalog_id": "winds___woodwinds_a_clarinet",
+      "name": "A Clarinet",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1480 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 48,
+      "catalog_id": "winds___woodwinds_bass_clarinet",
+      "name": "Bass Clarinet",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (73 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 49,
+      "catalog_id": "winds___woodwinds_bassoon",
+      "name": "Bassoon",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (58 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 50,
+      "catalog_id": "winds___woodwinds_contrabassoon",
+      "name": "Contrabassoon",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (29 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 51,
+      "catalog_id": "winds___woodwinds_soprano_saxophone",
+      "name": "Soprano Saxophone",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 52,
+      "catalog_id": "winds___woodwinds_alto_saxophone",
+      "name": "Alto Saxophone",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 53,
+      "catalog_id": "winds___woodwinds_tenor_saxophone",
+      "name": "Tenor Saxophone",
+      "category": "Instrument",
+      "display_family": "Winds — Woodwinds",
+      "symbol": "wind",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "register_changes",
+        "tonguing",
+        "sustained_tones",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 54,
+      "catalog_id": "winds___brass_bb_trumpet",
+      "name": "Bb Trumpet",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_bright_bell",
+      "renderer_class": "brass_bright",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 55,
+      "catalog_id": "winds___brass_c_trumpet",
+      "name": "C Trumpet",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_bright_bell",
+      "renderer_class": "brass_bright",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 56,
+      "catalog_id": "winds___brass_piccolo_trumpet",
+      "name": "Piccolo Trumpet",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_bright_bell",
+      "renderer_class": "brass_bright",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "breath_rich_attacks",
+        "tonguing",
+        "slurs",
+        "quiet_sustain",
+        "low_and_high_registers"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (1568 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 57,
+      "catalog_id": "winds___brass_cornet",
+      "name": "Cornet",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 58,
+      "catalog_id": "winds___brass_flugelhorn",
+      "name": "Flugelhorn",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 59,
+      "catalog_id": "winds___brass_french_horn",
+      "name": "French Horn",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (62 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 60,
+      "catalog_id": "winds___brass_tenor_trombone",
+      "name": "Tenor Trombone",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_bright_bell",
+      "renderer_class": "brass_bright",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 61,
+      "catalog_id": "winds___brass_bass_trombone",
+      "name": "Bass Trombone",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_bright_bell",
+      "renderer_class": "brass_bright",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (58 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 62,
+      "catalog_id": "winds___brass_alto_trombone",
+      "name": "Alto Trombone",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_bright_bell",
+      "renderer_class": "brass_bright",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 63,
+      "catalog_id": "winds___brass_euphonium",
+      "name": "Euphonium",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (58 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 64,
+      "catalog_id": "winds___brass_baritone_horn",
+      "name": "Baritone Horn",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 65,
+      "catalog_id": "winds___brass_bbb_tuba",
+      "name": "BBb Tuba",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (29 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 66,
+      "catalog_id": "winds___brass_sousaphone",
+      "name": "Sousaphone",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "brass_warm_horn",
+      "renderer_class": "brass_warm",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (29 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 67,
+      "catalog_id": "winds___brass_baritone_saxophone__brass_section_role_",
+      "name": "Baritone Saxophone (Brass-section role)",
+      "category": "Instrument",
+      "display_family": "Winds — Brass",
+      "symbol": "brass",
+      "renderer_model_id": "woodwind_reed",
+      "renderer_class": "woodwind_reed",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "explicit_scope_limited_no_full_mix_separation",
+      "claimed_behavior": [
+        "soft_and_strong_attacks",
+        "lip_slurs",
+        "dynamic_brightness",
+        "glissandi",
+        "low_fundamentals"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope.",
+        "Published fundamental (69 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 68,
+      "catalog_id": "percussion_snare_drum__wood_shell_",
+      "name": "Snare Drum (Wood Shell)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (4500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 69,
+      "catalog_id": "percussion_snare_drum__metal_shell_",
+      "name": "Snare Drum (Metal Shell)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 70,
+      "catalog_id": "percussion_kick_drum__22_inch_ported_",
+      "name": "Kick Drum (22-inch Ported)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (40 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (3500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 71,
+      "catalog_id": "percussion_kick_drum__20_inch_jazz_",
+      "name": "Kick Drum (20-inch Jazz)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (50 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2800 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 72,
+      "catalog_id": "percussion_rack_tom__12_inch_",
+      "name": "Rack Tom (12-inch)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2200 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 73,
+      "catalog_id": "percussion_floor_tom__16_inch_",
+      "name": "Floor Tom (16-inch)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (1800 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 74,
+      "catalog_id": "percussion_hi_hat__closed___chick_",
+      "name": "Hi-Hat (Closed / Chick)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (16000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 75,
+      "catalog_id": "percussion_ride_cymbal",
+      "name": "Ride Cymbal",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (16000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 76,
+      "catalog_id": "percussion_crash_cymbal",
+      "name": "Crash Cymbal",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (16000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 77,
+      "catalog_id": "percussion_overhead_drum_kit__full_",
+      "name": "Overhead Drum Kit (Full)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "explicit_scope_limited_no_full_mix_separation",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope.",
+        "Published fundamental (40 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (16000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 78,
+      "catalog_id": "percussion_timpani",
+      "name": "Timpani",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_strikes",
+        "overlapping_decays",
+        "rolls",
+        "harmonic_inharmonic_resonances"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass."
+      ]
+    },
+    {
+      "catalog_index": 79,
+      "catalog_id": "percussion_concert_bass_drum",
+      "name": "Concert Bass Drum",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (35 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 80,
+      "catalog_id": "percussion_marimba__5_octave_",
+      "name": "Marimba (5-Octave)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_strikes",
+        "overlapping_decays",
+        "rolls",
+        "harmonic_inharmonic_resonances"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 81,
+      "catalog_id": "percussion_vibraphone",
+      "name": "Vibraphone",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_strikes",
+        "overlapping_decays",
+        "rolls",
+        "harmonic_inharmonic_resonances"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 82,
+      "catalog_id": "percussion_xylophone",
+      "name": "Xylophone",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_strikes",
+        "overlapping_decays",
+        "rolls",
+        "harmonic_inharmonic_resonances"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 83,
+      "catalog_id": "percussion_glockenspiel",
+      "name": "Glockenspiel",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_strikes",
+        "overlapping_decays",
+        "rolls",
+        "harmonic_inharmonic_resonances"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 84,
+      "catalog_id": "percussion_tubular_bells__chimes_",
+      "name": "Tubular Bells (Chimes)",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "repeated_strikes",
+        "overlapping_decays",
+        "rolls",
+        "harmonic_inharmonic_resonances"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": []
+    },
+    {
+      "catalog_index": 85,
+      "catalog_id": "percussion_cajon",
+      "name": "Cajon",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (60 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 86,
+      "catalog_id": "percussion_djembe",
+      "name": "Djembe",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (3500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 87,
+      "catalog_id": "percussion_congas",
+      "name": "Congas",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2200 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 88,
+      "catalog_id": "percussion_bongos",
+      "name": "Bongos",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (3000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 89,
+      "catalog_id": "percussion_tabla",
+      "name": "Tabla",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (3500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 90,
+      "catalog_id": "percussion_frame_drum___bodhran",
+      "name": "Frame Drum / Bodhran",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (70 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 91,
+      "catalog_id": "percussion_tambourine___shaker",
+      "name": "Tambourine / Shaker",
+      "category": "Instrument",
+      "display_family": "Percussion",
+      "symbol": "percussion",
+      "renderer_model_id": "percussion_resonant",
+      "renderer_class": "percussion",
+      "analyzer_capability": "unsupported_unpitched_transient_extractor",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "rhythm",
+        "ghost_notes",
+        "rolls",
+        "attack_shape",
+        "spectral_evolution",
+        "decay"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (16000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Unpitched percussion requires dedicated transient/spectral-evolution extraction; pitched 75-1400 Hz F0 tracking is N/A."
+      ]
+    },
+    {
+      "catalog_index": 92,
+      "catalog_id": "keyboards_&_free_reed_concert_grand_piano__lid_open_",
+      "name": "Concert Grand Piano (Lid Open)",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_struck_hammer",
+      "renderer_class": "keyboard_struck",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (28 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 93,
+      "catalog_id": "keyboards_&_free_reed_baby_grand_piano",
+      "name": "Baby Grand Piano",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_struck_hammer",
+      "renderer_class": "keyboard_struck",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (28 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 94,
+      "catalog_id": "keyboards_&_free_reed_upright_piano",
+      "name": "Upright Piano",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_struck_hammer",
+      "renderer_class": "keyboard_struck",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (28 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 95,
+      "catalog_id": "keyboards_&_free_reed_harpsichord",
+      "name": "Harpsichord",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (44 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2794 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 96,
+      "catalog_id": "keyboards_&_free_reed_celesta",
+      "name": "Celesta",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_struck_hammer",
+      "renderer_class": "keyboard_struck",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 97,
+      "catalog_id": "keyboards_&_free_reed_electric_piano__rhodes___tine_amp_",
+      "name": "Electric Piano (Rhodes / Tine Amp)",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_struck_hammer",
+      "renderer_class": "keyboard_struck",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 98,
+      "catalog_id": "keyboards_&_free_reed_electric_piano__wurlitzer_reed_",
+      "name": "Electric Piano (Wurlitzer Reed)",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_struck_hammer",
+      "renderer_class": "keyboard_struck",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (44 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 99,
+      "catalog_id": "keyboards_&_free_reed_clavinet__through_amp_",
+      "name": "Clavinet (Through Amp)",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "plucked_electric_string",
+      "renderer_class": "plucked_electric",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (44 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2637 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 100,
+      "catalog_id": "keyboards_&_free_reed_tonewheel_organ__rotary_speaker_",
+      "name": "Tonewheel Organ (Rotary Speaker)",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_reed_organ",
+      "renderer_class": "keyboard_organ",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_chords",
+        "legato",
+        "staccato",
+        "release_behavior",
+        "level_swells"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (33 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 101,
+      "catalog_id": "keyboards_&_free_reed_pipe_organ__positive___small_",
+      "name": "Pipe Organ (Positive / Small)",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_reed_organ",
+      "renderer_class": "keyboard_organ",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_chords",
+        "legato",
+        "staccato",
+        "release_behavior",
+        "level_swells"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (33 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 102,
+      "catalog_id": "keyboards_&_free_reed_piano_accordion",
+      "name": "Piano Accordion",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_reed_organ",
+      "renderer_class": "keyboard_organ",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_chords",
+        "legato",
+        "staccato",
+        "release_behavior",
+        "level_swells"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 103,
+      "catalog_id": "keyboards_&_free_reed_bandoneon___concertina",
+      "name": "Bandoneon / Concertina",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_reed_organ",
+      "renderer_class": "keyboard_organ",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_notes",
+        "repeated_notes",
+        "chords",
+        "arpeggios",
+        "pedal_sustain_overlap",
+        "independent_releases"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (73 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (1760 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 104,
+      "catalog_id": "keyboards_&_free_reed_diatonic___chromatic_harmonica",
+      "name": "Diatonic / Chromatic Harmonica",
+      "category": "Instrument",
+      "display_family": "Keyboards & Free-Reed",
+      "symbol": "keyboard",
+      "renderer_model_id": "keyboard_reed_organ",
+      "renderer_class": "keyboard_organ",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "sustained_chords",
+        "legato",
+        "staccato",
+        "release_behavior",
+        "level_swells"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (2093 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 105,
+      "catalog_id": "amplifiers_&_cabinets_1x10_open_back_guitar_combo",
+      "name": "1x10 Open-Back Guitar Combo",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5400 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 106,
+      "catalog_id": "amplifiers_&_cabinets_1x12_open_back_guitar_combo",
+      "name": "1x12 Open-Back Guitar Combo",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5400 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 107,
+      "catalog_id": "amplifiers_&_cabinets_2x12_open_back_guitar_combo",
+      "name": "2x12 Open-Back Guitar Combo",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5400 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 108,
+      "catalog_id": "amplifiers_&_cabinets_1x12_closed_back_guitar_cab",
+      "name": "1x12 Closed-Back Guitar Cab",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5400 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 109,
+      "catalog_id": "amplifiers_&_cabinets_2x12_closed_back_guitar_cab",
+      "name": "2x12 Closed-Back Guitar Cab",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (5200 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 110,
+      "catalog_id": "amplifiers_&_cabinets_4x12_slanted_guitar_cab",
+      "name": "4x12 Slanted Guitar Cab",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (70 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (5000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 111,
+      "catalog_id": "amplifiers_&_cabinets_1x15_bass_combo",
+      "name": "1x15 Bass Combo",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (38 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (3500 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 112,
+      "catalog_id": "amplifiers_&_cabinets_4x10_bass_cabinet",
+      "name": "4x10 Bass Cabinet",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4200 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 113,
+      "catalog_id": "amplifiers_&_cabinets_8x10_bass_cabinet",
+      "name": "8x10 Bass Cabinet",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "plucked_bass_string",
+      "renderer_class": "plucked_bass",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (38 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 114,
+      "catalog_id": "amplifiers_&_cabinets_acoustic_instrument_combo_amp",
+      "name": "Acoustic Instrument Combo Amp",
+      "category": "Instrument",
+      "display_family": "Amplifiers & Cabinets",
+      "symbol": "amp",
+      "renderer_model_id": "amp_cabinet_voiced",
+      "renderer_class": "amp_cabinet",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "documented_source_and_chain_conditions",
+        "preserved_performed_gestures",
+        "disclosed_cabinet_approximation"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (55 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (14000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Cabinet/amplifier entries represent modeled recording-chain conditions, not independent acoustic instruments."
+      ]
+    },
+    {
+      "catalog_index": 115,
+      "catalog_id": "male_male_bass_voice",
+      "name": "Male Bass Voice",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 116,
+      "catalog_id": "male_male_baritone_voice",
+      "name": "Male Baritone Voice",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 117,
+      "catalog_id": "male_male_tenor_voice",
+      "name": "Male Tenor Voice",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 118,
+      "catalog_id": "male_male_countertenor_voice",
+      "name": "Male Countertenor Voice",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 119,
+      "catalog_id": "male_male_spoken_voice__broadcast_",
+      "name": "Male Spoken Voice (Broadcast)",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 120,
+      "catalog_id": "male_male_narrator___audiobook",
+      "name": "Male Narrator / Audiobook",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 121,
+      "catalog_id": "male_male_percussive___rap_vocal",
+      "name": "Male Percussive / Rap Vocal",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 122,
+      "catalog_id": "male_male_whisper___intimate_vocal",
+      "name": "Male Whisper / Intimate Vocal",
+      "category": "Human",
+      "display_family": "Male",
+      "symbol": "voice",
+      "renderer_model_id": "voice_male_formant",
+      "renderer_class": "voice_male",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (6000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 123,
+      "catalog_id": "female_female_contralto_voice",
+      "name": "Female Contralto Voice",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 124,
+      "catalog_id": "female_female_mezzo_soprano_voice",
+      "name": "Female Mezzo-Soprano Voice",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 125,
+      "catalog_id": "female_female_soprano_voice",
+      "name": "Female Soprano Voice",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 126,
+      "catalog_id": "female_female_coloratura_soprano",
+      "name": "Female Coloratura Soprano",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 127,
+      "catalog_id": "female_female_spoken_voice__broadcast_",
+      "name": "Female Spoken Voice (Broadcast)",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 128,
+      "catalog_id": "female_female_narrator___audiobook",
+      "name": "Female Narrator / Audiobook",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 129,
+      "catalog_id": "female_female_belt___contemporary_lead",
+      "name": "Female Belt / Contemporary Lead",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "pitched_contour_only_fixed_formants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "low_and_high_registers",
+        "register_transitions",
+        "sustained_and_changing_vowels",
+        "lyrics_consonants",
+        "breath",
+        "vibrato",
+        "slides",
+        "soft_entrances_dynamics"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Fixed vocal formants do not establish preservation of changing vowels, lyrics, consonants, or breath transitions."
+      ]
+    },
+    {
+      "catalog_index": 130,
+      "catalog_id": "female_female_whisper___intimate_vocal",
+      "name": "Female Whisper / Intimate Vocal",
+      "category": "Human",
+      "display_family": "Female",
+      "symbol": "voice",
+      "renderer_model_id": "voice_female_formant",
+      "renderer_class": "voice_female",
+      "analyzer_capability": "unsupported_speech_whisper_consonants",
+      "scope_status": "single_source_supported_target",
+      "claimed_behavior": [
+        "complete_words",
+        "sibilants",
+        "plosives",
+        "pauses",
+        "fast_syllables",
+        "voiced_unvoiced_transitions",
+        "whisper_passages"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Published fundamental (7000 Hz) extends above current guitar analyzer 1400 Hz ceiling.",
+        "Current pitched-note cue representation & fixed vocal formants do not establish preservation of changing vowels, lyrics, sibilants, plosives, or whispers."
+      ]
+    },
+    {
+      "catalog_index": 131,
+      "catalog_id": "other___ensemble_child___treble_voice",
+      "name": "Child / Treble Voice",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "voice_treble_ensemble",
+      "renderer_class": "voice_ensemble",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope."
+      ]
+    },
+    {
+      "catalog_index": 132,
+      "catalog_id": "other___ensemble_non_binary___androgynous_voice",
+      "name": "Non-Binary / Androgynous Voice",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "voice_treble_ensemble",
+      "renderer_class": "voice_ensemble",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope."
+      ]
+    },
+    {
+      "catalog_index": 133,
+      "catalog_id": "other___ensemble_vocal_duo___harmony_pair",
+      "name": "Vocal Duo / Harmony Pair",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "voice_treble_ensemble",
+      "renderer_class": "voice_ensemble",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope."
+      ]
+    },
+    {
+      "catalog_index": 134,
+      "catalog_id": "other___ensemble_a_cappella_quartet",
+      "name": "A Cappella Quartet",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "voice_treble_ensemble",
+      "renderer_class": "voice_ensemble",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope."
+      ]
+    },
+    {
+      "catalog_index": 135,
+      "catalog_id": "other___ensemble_chamber_choir__satb_",
+      "name": "Chamber Choir (SATB)",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "voice_treble_ensemble",
+      "renderer_class": "voice_ensemble",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope."
+      ]
+    },
+    {
+      "catalog_index": 136,
+      "catalog_id": "other___ensemble_string_quartet__ensemble_",
+      "name": "String Quartet (Ensemble)",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "bowed_cello_low",
+      "renderer_class": "bowed_low",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope.",
+        "Published fundamental (65 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (3136 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    },
+    {
+      "catalog_index": 137,
+      "catalog_id": "other___ensemble_small_acoustic_combo__ensemble_",
+      "name": "Small Acoustic Combo (Ensemble)",
+      "category": "Human",
+      "display_family": "Other / Ensemble",
+      "symbol": "ensemble",
+      "renderer_model_id": "plucked_acoustic_wood",
+      "renderer_class": "plucked_acoustic",
+      "analyzer_capability": "pitched_guitar_analyzer_75_1400hz_hp65hz",
+      "scope_status": "unspecified_or_auxiliary_scope",
+      "claimed_behavior": [
+        "explicit_scope_disclosure",
+        "honest_uncertainty"
+      ],
+      "real_recording_cases": [],
+      "synthetic_control_cases": [],
+      "automated_technical_status": "NOT RUN",
+      "automated_musical_status": "NOT RUN",
+      "synthetic_control_status": "NOT RUN",
+      "real_recording_acceptance": "NOT RUN",
+      "human_review_status": "NOT RUN",
+      "application_surfaces": {
+        "cli": "NOT RUN",
+        "desktop_egui": "NOT RUN",
+        "web_bridge": "NOT RUN",
+        "tauri_packaged": "NOT RUN"
+      },
+      "limitations": [
+        "Single-source invariant: catalog label cannot authorize full-mix separation; multi-instrument mixes are out of scope.",
+        "Published fundamental (41 Hz) extends below current guitar analyzer 75 Hz floor / 65 Hz high-pass.",
+        "Published fundamental (4186 Hz) extends above current guitar analyzer 1400 Hz ceiling."
+      ]
+    }
+  ]
+}

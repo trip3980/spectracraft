@@ -141,27 +141,70 @@ const SPEC_LUT = (() => {
   return lut;
 })();
 
-/**
- * Renders a calibrated real-FFT spectrogram of `pcm` into the target canvas 2D context region.
- */
-export function renderSpectrogramToCanvas(
-  ctx: CanvasRenderingContext2D,
-  pcm: Float32Array,
-  sampleRate: number,
-  viewStartS: number,
-  viewEndS: number,
-  displayMaxHz: number,
-  width: number,
-  height: number,
-  fftSize = 1024,
-  dbFloor = -96,
-  dbCeil = -12,
-): void {
-  if (width <= 0 || height <= 0 || pcm.length === 0) return;
+export interface SpectrogramRenderParams {
+  pcm: Float32Array;
+  /** Decoded AudioBuffer.sampleRate (NEVER source file metadata when resampled by Web Audio). */
+  sampleRate: number;
+  viewStartS: number;
+  viewEndS: number;
+  displayMaxHz: number;
+  width: number;
+  height: number;
+  fftSize?: number;
+  dbFloor?: number;
+  dbCeil?: number;
+  /** Optional original file sample rate for Nyquist ceiling display when source < decoded rate. */
+  sourceNyquistSampleRate?: number;
+}
 
-  const img = ctx.createImageData(width, height);
-  const data = img.data;
-  const nyquist = sampleRate / 2;
+export interface SpectrogramPixelsResult {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+  fftCount: number;
+}
+
+/**
+ * Always return the decoded AudioBuffer's own sampleRate for PCM indexing, FFT bin frequencies,
+ * and duration calculations (Audit H8). Never index decoded PCM using original file metadata
+ * when Web Audio resampled on decode.
+ */
+export function getEffectiveBufferSampleRate(
+  buffer: { sampleRate: number } | null | undefined,
+  fallbackSampleRate = 48000,
+): number {
+  const sr = buffer?.sampleRate;
+  return typeof sr === 'number' && Number.isFinite(sr) && sr > 0 ? sr : fallbackSampleRate;
+}
+
+/**
+ * Pure real-FFT spectrogram RGBA pixel generator (testable in Node without Canvas2D).
+ */
+export function buildSpectrogramPixels(params: SpectrogramRenderParams): SpectrogramPixelsResult {
+  const {
+    pcm,
+    sampleRate,
+    viewStartS,
+    viewEndS,
+    displayMaxHz,
+    width,
+    height,
+    fftSize = 1024,
+    dbFloor = -96,
+    dbCeil = -12,
+    sourceNyquistSampleRate,
+  } = params;
+
+  const data = new Uint8ClampedArray(Math.max(0, width * height * 4));
+  if (width <= 0 || height <= 0 || pcm.length === 0 || sampleRate <= 0) {
+    return { width, height, data, fftCount: 0 };
+  }
+
+  const decodedNyquist = sampleRate / 2;
+  const effectiveNyquist =
+    sourceNyquistSampleRate && sourceNyquistSampleRate > 0
+      ? Math.min(decodedNyquist, sourceNyquistSampleRate / 2)
+      : decodedNyquist;
   const maxBins = fftSize >> 1;
   const hann = getHannWindow(fftSize);
   const re = new Float32Array(fftSize);
@@ -171,6 +214,7 @@ export function renderSpectrogramToCanvas(
   const colStep = width / cols;
   const dbSpan = Math.max(1, dbCeil - dbFloor);
   const total = pcm.length;
+  let fftCount = 0;
 
   for (let c = 0; c < cols; c++) {
     const tS = viewStartS + ((c + 0.5) / cols) * (viewEndS - viewStartS);
@@ -183,14 +227,14 @@ export function renderSpectrogramToCanvas(
       im[i] = 0;
     }
     fftRadix2(re, im);
+    fftCount += 1;
 
     const x0 = Math.floor(c * colStep);
     const x1 = Math.min(width, Math.ceil((c + 1) * colStep));
 
     for (let y = 0; y < height; y++) {
       const freq = displayMaxHz * (1 - y / Math.max(1, height - 1));
-      if (freq > nyquist) {
-        // Above Nyquist: neutral hatched dark slate (overlay label drawn separately)
+      if (freq > effectiveNyquist) {
         for (let x = x0; x < x1; x++) {
           const p = (y * width + x) * 4;
           const stripe = (x + y) % 8 < 2 ? 38 : 28;
@@ -202,7 +246,7 @@ export function renderSpectrogramToCanvas(
         continue;
       }
 
-      const binF = (freq / nyquist) * maxBins;
+      const binF = (freq / decodedNyquist) * maxBins;
       const b0 = Math.max(0, Math.min(maxBins - 1, Math.floor(binF)));
       const b1 = Math.min(maxBins - 1, b0 + 1);
       const frac = binF - b0;
@@ -226,6 +270,120 @@ export function renderSpectrogramToCanvas(
     }
   }
 
+  return { width, height, data, fftCount };
+}
+
+/**
+ * LRU Spectrogram tile cache keyed by audio buffer identity + viewport + scale parameters
+ * so playhead-only animation executes ZERO FFT computations (Audit M3).
+ */
+export class SpectrogramTileCache {
+  private readonly cache = new Map<string, SpectrogramPixelsResult>();
+  private readonly bufferIds = new WeakMap<Float32Array, number>();
+  private nextBufferId = 1;
+  private readonly maxEntries: number;
+  public totalFftComputations = 0;
+  public cacheHits = 0;
+  public cacheMisses = 0;
+
+  constructor(maxEntries = 12) {
+    this.maxEntries = Math.max(2, maxEntries);
+  }
+
+  private getBufferId(pcm: Float32Array): number {
+    let id = this.bufferIds.get(pcm);
+    if (!id) {
+      id = this.nextBufferId++;
+      this.bufferIds.set(pcm, id);
+    }
+    return id;
+  }
+
+  public makeKey(params: SpectrogramRenderParams): string {
+    const bufId = this.getBufferId(params.pcm);
+    return [
+      bufId,
+      params.pcm.length,
+      params.sampleRate,
+      params.sourceNyquistSampleRate ?? 0,
+      params.viewStartS.toFixed(5),
+      params.viewEndS.toFixed(5),
+      Math.round(params.displayMaxHz),
+      params.width,
+      params.height,
+      params.fftSize ?? 1024,
+      params.dbFloor ?? -96,
+      params.dbCeil ?? -12,
+    ].join('|');
+  }
+
+  public getOrCompute(params: SpectrogramRenderParams): SpectrogramPixelsResult {
+    const key = this.makeKey(params);
+    const existing = this.cache.get(key);
+    if (existing) {
+      this.cacheHits += 1;
+      // Refresh LRU ordering
+      this.cache.delete(key);
+      this.cache.set(key, existing);
+      return existing;
+    }
+    this.cacheMisses += 1;
+    const computed = buildSpectrogramPixels(params);
+    this.totalFftComputations += computed.fftCount;
+    this.cache.set(key, computed);
+    if (this.cache.size > this.maxEntries) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    return computed;
+  }
+
+  public clear(): void {
+    this.cache.clear();
+  }
+}
+
+export const sharedSpectrogramTileCache = new SpectrogramTileCache(16);
+
+/**
+ * Renders a calibrated real-FFT spectrogram of `pcm` into the target canvas 2D context region,
+ * reusing cached RGBA pixels whenever buffer, viewport, dimensions, and display scale are unchanged.
+ */
+export function renderSpectrogramToCanvas(
+  ctx: CanvasRenderingContext2D,
+  pcm: Float32Array,
+  sampleRate: number,
+  viewStartS: number,
+  viewEndS: number,
+  displayMaxHz: number,
+  width: number,
+  height: number,
+  fftSize = 1024,
+  dbFloor = -96,
+  dbCeil = -12,
+  sourceNyquistSampleRate?: number,
+  tileCache: SpectrogramTileCache = sharedSpectrogramTileCache,
+): void {
+  if (width <= 0 || height <= 0 || pcm.length === 0) return;
+
+  const pixels = tileCache.getOrCompute({
+    pcm,
+    sampleRate,
+    viewStartS,
+    viewEndS,
+    displayMaxHz,
+    width,
+    height,
+    fftSize,
+    dbFloor,
+    dbCeil,
+    sourceNyquistSampleRate,
+  });
+
+  const img = ctx.createImageData(width, height);
+  img.data.set(pixels.data);
   ctx.putImageData(img, 0, 0);
 }
 

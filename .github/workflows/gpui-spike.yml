@@ -1,0 +1,96 @@
+name: Experimental GPUI Frontend Spike
+
+on:
+  push:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'spectracraft-mono/**'
+      - 'apps/spectracraft-gpui/**'
+      - 'docs/GPUI_INTEGRATION.md'
+      - '.github/workflows/gpui-spike.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'spectracraft-mono/**'
+      - 'apps/spectracraft-gpui/**'
+      - 'docs/GPUI_INTEGRATION.md'
+      - '.github/workflows/gpui-spike.yml'
+  workflow_dispatch:
+
+jobs:
+  core-and-shared-boundary:
+    name: Core Engine & Shared Session Boundary (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0
+      - name: Install Linux audio dev headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev
+      - name: Check core library without desktop/GPUI features
+        run: cargo check --locked -p spectracraft-mono --lib --no-default-features
+      - name: Check playback feature without eframe/egui
+        run: cargo check --locked -p spectracraft-mono --lib --features playback
+      - name: Run core library unit tests (incl. visualization)
+        run: cargo test --locked -p spectracraft-mono --lib
+      - name: Run shared session and job boundary integration tests
+        run: cargo test --locked -p spectracraft-mono --test app_session_jobs
+
+  egui-desktop-preservation:
+    name: Existing egui Desktop Preservation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0
+      - name: Install Linux egui/X11/ALSA dev headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libgl1-mesa-dev libfontconfig1-dev libgtk-3-dev
+      - name: Check existing spectracraft-desktop (egui)
+        run: cargo check --locked -p spectracraft-mono --features desktop --bin spectracraft-desktop
+      - name: Run existing spectracraft-desktop tests
+        run: cargo test --locked -p spectracraft-mono --features desktop --bin spectracraft-desktop
+
+  experimental-gpui-frontend:
+    name: Experimental GPUI Frontend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0
+        with:
+          components: rustfmt,clippy
+      - name: Install Linux GPUI/Vulkan/Wayland/X11/ALSA dev headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libfontconfig1-dev libwayland-dev libvulkan-dev libgtk-3-dev
+      - name: Verify root Cargo.lock has zero GPUI dependencies
+        shell: bash
+        run: |
+          if grep -q 'name = "gpui"' Cargo.lock; then
+            echo "ERROR: root Cargo.lock must remain GPUI-free"
+            exit 1
+          fi
+      - name: Check apps/spectracraft-gpui with locked manifest
+        run: cargo check --locked --manifest-path apps/spectracraft-gpui/Cargo.toml
+      - name: Run headless GPUI and parity tests
+        run: cargo test --locked --manifest-path apps/spectracraft-gpui/Cargo.toml
+      - name: Check formatting on apps/spectracraft-gpui
+        run: cargo fmt --manifest-path apps/spectracraft-gpui/Cargo.toml -- --check

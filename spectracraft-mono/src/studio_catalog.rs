@@ -18,6 +18,11 @@ use std::sync::OnceLock;
 
 pub const FEET_TO_METRES: f32 = 0.3048;
 
+/// Reference microphone-to-source distance (0.40 m) where an on-axis unity omni microphone
+/// has calibrated 0 dB direct sensitivity (inverse-distance 1/r attenuation is computed relative
+/// to this reference distance in `Timing::Physical` capture mode).
+pub const DIRECT_REF_DISTANCE_M: f64 = 0.40;
+
 /// Octave-band centre frequencies (Hz) for 6-band surface reflection and DRR reporting.
 pub const BANDS_HZ: [f64; 6] = [125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0];
 
@@ -1566,9 +1571,102 @@ impl StudioRig {
         }
         self.clamp_all();
     }
+    /// Maximum supported simultaneous microphone slots per rig.
+    pub const MAX_MIC_SLOTS: usize = 4;
+
+    /// Validate a `StudioRig` at session, engine-state, CLI, or IPC boundaries.
+    /// Rejects empty or oversized microphone lists, invalid indices, non-finite parameters,
+    /// and out-of-bounds geometry without mutating or silently substituting defaults.
+    pub fn validate(
+        &self,
+        sources_len: usize,
+        mics_len: usize,
+        surfaces_len: usize,
+    ) -> crate::Result<()> {
+        if self.mics.is_empty() {
+            return Err("StudioRig must contain at least one microphone slot".into());
+        }
+        if self.mics.len() > Self::MAX_MIC_SLOTS {
+            return Err(format!(
+                "StudioRig supports at most {} microphone slots (got {})",
+                Self::MAX_MIC_SLOTS,
+                self.mics.len()
+            )
+            .into());
+        }
+        if self.selected_mic >= self.mics.len() {
+            return Err(format!(
+                "selected_mic index {} out of bounds for {} microphone slot(s)",
+                self.selected_mic,
+                self.mics.len()
+            )
+            .into());
+        }
+        if sources_len > 0 && self.source_index >= sources_len {
+            return Err(format!(
+                "source_index {} out of bounds (catalog size {})",
+                self.source_index, sources_len
+            )
+            .into());
+        }
+        if !self.temperature_c.is_finite() || !(-20.0..=50.0).contains(&self.temperature_c) {
+            return Err("temperature_c must be finite and within [-20, 50] C".into());
+        }
+        for (axis, &d) in self.dimensions_m.iter().enumerate() {
+            if !d.is_finite() || !(1.5..=40.0).contains(&d) {
+                return Err(format!(
+                    "Room dimension axis {axis} ({d}) must be finite and within [1.5, 40.0] m"
+                )
+                .into());
+            }
+        }
+        for (axis, &off) in self.source_offset_m.iter().enumerate() {
+            if !off.is_finite() {
+                return Err(format!("source_offset_m[{axis}] must be finite").into());
+            }
+        }
+        if surfaces_len > 0 {
+            for (face, &idx) in self.surface_faces.iter().enumerate() {
+                if idx >= surfaces_len {
+                    return Err(format!(
+                        "surface_faces[{face}] index {idx} out of bounds (catalog size {surfaces_len})"
+                    )
+                    .into());
+                }
+            }
+        }
+        for (i, slot) in self.mics.iter().enumerate() {
+            if mics_len > 0 && slot.catalog_index >= mics_len {
+                return Err(format!(
+                    "mics[{i}].catalog_index {} out of bounds (catalog size {mics_len})",
+                    slot.catalog_index
+                )
+                .into());
+            }
+            if !slot.offset_m.iter().all(|v| v.is_finite()) {
+                return Err(format!("mics[{i}].offset_m contains non-finite coordinates").into());
+            }
+            if !slot.aim.heading_z_deg.is_finite() || !slot.aim.tilt_x_deg.is_finite() {
+                return Err(format!("mics[{i}].aim contains non-finite angles").into());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn try_active_mic(&self) -> Option<&MicSlot> {
+        if self.mics.is_empty() {
+            return None;
+        }
+        let idx = self.selected_mic.min(self.mics.len() - 1);
+        self.mics.get(idx)
+    }
+
     pub fn active_mic(&self) -> &MicSlot {
-        let idx = self.selected_mic.min(self.mics.len().saturating_sub(1));
-        &self.mics[idx]
+        if let Some(slot) = self.try_active_mic() {
+            return slot;
+        }
+        static FALLBACK_MIC: std::sync::OnceLock<MicSlot> = std::sync::OnceLock::new();
+        FALLBACK_MIC.get_or_init(MicSlot::sm7_baseline)
     }
     pub fn active_mic_mut(&mut self) -> &mut MicSlot {
         if self.mics.is_empty() {
@@ -1579,7 +1677,7 @@ impl StudioRig {
         &mut self.mics[idx]
     }
     pub fn add_mic_slot(&mut self) {
-        if self.mics.len() >= 4 {
+        if self.mics.len() >= Self::MAX_MIC_SLOTS {
             return;
         }
         let n = self.mics.len() + 1;
@@ -1614,6 +1712,13 @@ impl StudioRig {
         self.mics[slot_idx].catalog_index = catalog_index.min(mics_len - 1);
     }
     pub fn clamp_all(&mut self) {
+        if self.mics.is_empty() {
+            self.mics.push(MicSlot::sm7_baseline());
+        }
+        if self.mics.len() > Self::MAX_MIC_SLOTS {
+            self.mics.truncate(Self::MAX_MIC_SLOTS);
+        }
+        self.selected_mic = self.selected_mic.min(self.mics.len() - 1);
         if !self.temperature_c.is_finite() {
             self.temperature_c = 20.0;
         }
@@ -1773,12 +1878,21 @@ pub fn capture_paths_6band(
     let aim = slot.aim.direction().map(f64::from);
     let direct_arrival_s = dist / c;
 
-    // Direct ray: source -> mic
+    // Direct ray: source -> mic.
+    // Under canonical `Timing::Physical`, direct pressure obeys calibrated 1/r spherical
+    // spreading referenced to `DIRECT_REF_DISTANCE_M` (0.40 m -> 0.0 dB, 0.80 m -> -6.0206 dB)
+    // and preserves physical acoustic propagation delay `dist / c`.
+    // Under explicit `Timing::AlignDirect` monitoring, direct arrival is sample-aligned and
+    // level-matched for instant audition comparisons.
     let dir_s2m = [off[0] / dist, off[1] / dist, off[2] / dist];
     let src_direct = src_rad.gain(dir_s2m[1]);
     let cos_mic_direct = -(dir_s2m[0] * aim[0] + dir_s2m[1] * aim[1] + dir_s2m[2] * aim[2]);
     let mic_direct = directivity.pressure(cos_mic_direct).unwrap_or(1.0);
-    let direct_gain = (src_direct * mic_direct).clamp(-1.0, 1.0);
+    let direct_distance_scale = match timing {
+        Timing::Physical => (DIRECT_REF_DISTANCE_M / dist).clamp(0.0, 2.0),
+        Timing::AlignDirect => 1.0,
+    };
+    let direct_gain = (src_direct * mic_direct * direct_distance_scale).clamp(-2.0, 2.0);
 
     let direct_delay = match timing {
         Timing::AlignDirect => 0.0,
@@ -1861,7 +1975,10 @@ pub fn capture_paths_6band(
                     let y_parity = if iy % 2 == 0 { 1.0 } else { -1.0 };
                     let cos_src = ((-to_img[1]) / travel) * y_parity;
                     let src_g = src_rad.gain(cos_src);
-                    let spread = dist / travel;
+                    let spread = match timing {
+                        Timing::Physical => (DIRECT_REF_DISTANCE_M / travel).clamp(0.0, 2.0),
+                        Timing::AlignDirect => dist / travel,
+                    };
                     let base_scalar = spread * src_g;
                     if base_scalar.abs() < 1e-5 {
                         continue;
@@ -2083,9 +2200,14 @@ fn render_capture_6band_len(
             continue;
         }
         let frac = d_samp - d0 as f64;
+        let direct_flat = path.order == 0;
+        let sinc16 = if direct_flat && frac > 1e-12 {
+            Some(crate::acoustics_physics::sinc16_weights_phase(frac))
+        } else {
+            None
+        };
         let lag = crate::acoustics_physics::lagrange4_weights(frac);
         let max_src = n.min(out_len - d0);
-        let direct_flat = path.order == 0;
         for src_i in 0..max_src {
             let v = if direct_flat {
                 clean_in[src_i] * g[0]
@@ -2096,6 +2218,10 @@ fn render_capture_6band_len(
             let dst = src_i + d0;
             if frac <= 1e-12 {
                 out[dst] += v;
+            } else if let (Some(w16), true) = (sinc16, dst >= 7 && dst + 8 < out_len) {
+                for (t, &wt) in w16.iter().enumerate() {
+                    out[dst + t - 7] += v * wt;
+                }
             } else if dst >= 1 && dst + 2 < out_len {
                 out[dst - 1] += v * lag[0];
                 out[dst] += v * lag[1];

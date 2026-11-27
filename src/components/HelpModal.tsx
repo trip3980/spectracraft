@@ -10,6 +10,7 @@ import {
   type HelpNavigationAction,
   type HelpTopic,
 } from '../lib/helpCatalog.ts';
+import { getTransport } from '../lib/transport.ts';
 
 export type HelpModalTab = 'search' | 'glossary' | 'docs' | 'about';
 
@@ -69,23 +70,18 @@ export function HelpModal({
       return;
     }
     let active = true;
+    const ctrl = new AbortController();
     setDocLoading(true);
     setDocError(null);
-    fetch(`/api/help/docs/${encodeURIComponent(selectedDocId)}`)
-      .then(async (res) => {
-        const data = (await res.json().catch(() => null)) as (LoadedDoc & { error?: string }) | null;
-        if (!res.ok || !data?.content) {
-          throw new Error(data?.error || `Failed to load document (${res.status})`);
-        }
-        return data;
-      })
+    getTransport()
+      .getHelpDoc(selectedDocId, ctrl.signal)
       .then((doc) => {
         if (active) {
           setDocCache((prev) => ({ ...prev, [selectedDocId]: doc }));
         }
       })
       .catch((err) => {
-        if (active) {
+        if (active && !(err instanceof DOMException && err.name === 'AbortError')) {
           setDocError(err instanceof Error ? err.message : String(err));
         }
       })
@@ -94,6 +90,7 @@ export function HelpModal({
       });
     return () => {
       active = false;
+      ctrl.abort();
     };
   }, [open, activeTab, selectedDocId, docCache]);
 

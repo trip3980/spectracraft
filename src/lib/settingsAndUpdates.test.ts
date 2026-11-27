@@ -175,4 +175,26 @@ test('workspace preferences default to a calm ArtCraft layout and expose studio 
   assert.deepEqual(makeWorkspacePreset('calm'), DEFAULT_WORKSPACE_PREFS);
 });
 
+test('M9: pickRecommendedUpdateTarget extracts raw pin from structured StagedTarget, JSON, or legacy display label', () => {
+  const fromDetail = makeReport({
+    has_staged_download: true,
+    staged_target: 'craft-libs@v0.2.5',
+    staged_target_detail: { pin: 'v0.2.5', kind: 'tag', display_label: 'craft-libs@v0.2.5' },
+  });
+  assert.equal(pickRecommendedUpdateTarget(fromDetail), 'v0.2.5');
+
+  const fromLegacy = makeReport({
+    has_staged_download: true,
+    staged_target: 'craft-libs@05b99ee5',
+  });
+  assert.equal(pickRecommendedUpdateTarget(fromLegacy), '05b99ee5');
+
+  const fromJson = makeReport({
+    has_staged_download: true,
+    staged_target: JSON.stringify({ pin: 'v0.3.1', kind: 'tag', display_label: 'craft-libs@v0.3.1' }),
+  });
+  assert.equal(pickRecommendedUpdateTarget(fromJson), 'v0.3.1');
+});
+
+
 

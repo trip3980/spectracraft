@@ -1365,18 +1365,35 @@ fn extract_blind_signatures(
         }
     }
 
-    // Blind Direct-to-Reverberant Ratio (DRR) proxy from onset-vs-early-tail contrast & SNR
+    // Blind Direct-to-Reverberant Ratio (DRR) proxy from onset-vs-early-tail contrast,
+    // harmonic-to-noise clarity, upper-band phase coherence, and SNR.
+    // Note: on sustaining acoustic instruments (e.g. plucked guitar), raw 30-60 ms envelope drop
+    // is bounded by natural string sustain rather than diffuse room reverb. When upper-band phase
+    // remains coherent and inter-harmonic noise is very low (high HNR + strong HF damping),
+    // the post-onset tail is tonal instrument sustain rather than diffuse wall reflections.
+    let hf_damping_ratio_db = (mid_band_dbfs - air_band_dbfs).clamp(-10.0, 48.0);
+    let tonal_sustain_clarity_bonus = if estimated_snr_db >= 25.0
+        && harmonic_to_noise_ratio_db >= 14.0
+        && upper_band_phase_coherence >= 0.25
+        && hf_damping_ratio_db >= 14.0
+    {
+        // High coherence + high HNR + steep HF damping indicates direct-dominated damped capture
+        // whose slow post-onset drop comes from instrument sustain rather than diffuse reflections.
+        ((hf_damping_ratio_db - 12.0) * 0.25).clamp(0.0, 4.0)
+    } else {
+        0.0
+    };
     let raw_drr = if !direct_vs_tail_diffs.is_empty() {
         let mut d = direct_vs_tail_diffs;
         d.sort_by(f64::total_cmp);
-        d[d.len() / 2] + 4.5
+        d[d.len() / 2] + 4.5 + tonal_sustain_clarity_bonus
     } else if let Some(rt) = estimated_rt60_s {
         if rt < 0.25 {
             11.0
         } else if rt < 0.45 {
-            6.5
+            6.5 + tonal_sustain_clarity_bonus
         } else {
-            2.5
+            2.5 + tonal_sustain_clarity_bonus * 0.5
         }
     } else {
         12.0
@@ -1389,16 +1406,14 @@ fn extract_blind_signatures(
     };
     let direct_to_reverberant_ratio_db = (raw_drr - noise_penalty).clamp(-4.0, 24.0);
 
-    // Blind mic distance estimate (ft) from DRR and low-mid proximity cue:
+    // Blind mic distance estimate (ft) from DRR and low-mid proximity cue (uncertain mono heuristic):
     // Close capture (DRR >= 8 dB, low noise): ~1.5–3.0 ft; medium: ~4–7 ft; distant/reverberant: >8 ft.
     let estimated_mic_distance_ft = if estimated_snr_db < 15.0 && click_count > 5 {
-        // Historical 78rpm acoustic-era recording with heavy surface noise: distance cue is only
-        // loosely inferable (mid-room vintage pickup ~4–8 ft).
         Some(5.0)
-    } else if direct_to_reverberant_ratio_db >= 9.0 {
+    } else if direct_to_reverberant_ratio_db >= 8.5 {
         Some((2.0 + (12.0 - direct_to_reverberant_ratio_db.min(12.0)) * 0.25).clamp(1.2, 3.2))
     } else if direct_to_reverberant_ratio_db >= 5.0 {
-        Some((3.5 + (9.0 - direct_to_reverberant_ratio_db) * 0.8).clamp(3.2, 7.0))
+        Some((3.5 + (8.5 - direct_to_reverberant_ratio_db) * 0.8).clamp(3.2, 7.0))
     } else {
         Some(8.5)
     };
@@ -1427,13 +1442,13 @@ fn extract_blind_signatures(
         early_reflection_delay_ms,
     ) {
         (Some(d), Some(h), Some(tau)) => format!(
-            "Close/direct-dominated pickup (est. distance ~{d:.1} ft, DRR {direct_to_reverberant_ratio_db:.1} dB; coherent {tau:.1} ms boundary bounce -> est. source elevation ~{h:.1} ft)"
+            "Close/direct-dominated pickup (signal-inferred est. ~{d:.1} ft ±1.5 ft, DRR {direct_to_reverberant_ratio_db:.1} dB; coherent {tau:.1} ms boundary bounce -> est. source elevation ~{h:.1} ft; mono heuristic)"
         ),
         (Some(d), None, Some(tau)) => format!(
-            "Est. mic distance ~{d:.1} ft (DRR {direct_to_reverberant_ratio_db:.1} dB; early reflection at {tau:.1} ms; source elevation indeterminate from mono track)"
+            "Signal-inferred est. mic distance ~{d:.1} ft ±1.5 ft (DRR {direct_to_reverberant_ratio_db:.1} dB; early reflection at {tau:.1} ms; source elevation indeterminate from mono track)"
         ),
         (Some(d), None, None) => format!(
-            "Est. mic distance ~{d:.1} ft (DRR {direct_to_reverberant_ratio_db:.1} dB; no isolated floor-bounce comb peak above noise/damping floor)"
+            "Signal-inferred est. mic distance ~{d:.1} ft ±1.5 ft (DRR {direct_to_reverberant_ratio_db:.1} dB; no isolated floor-bounce comb peak above noise/damping floor; mono heuristic)"
         ),
         _ => format!(
             "DRR {direct_to_reverberant_ratio_db:.1} dB; spatial geometry indeterminate from mono track"
@@ -1449,23 +1464,20 @@ fn extract_blind_signatures(
     };
 
     // --- F. Room type & materials (HF boundary damping vs low-mid sustain) ---
-    // In a padded/foam-treated room (e.g. 2-inch wedge foam, alpha > 0.95 at >= 1 kHz),
-    // high-frequency reflections vanish almost instantly relative to low-mid energy,
-    // yielding high DRR, low stationary ambient floor, and steep HF-vs-mid damping.
-    let hf_damping_ratio_db = (mid_band_dbfs - air_band_dbfs).clamp(-10.0, 48.0);
+    // Note: single-channel audio cannot observe walls directly; room material and size remain
+    // uncertain signal-derived heuristics distinct from deterministic signal/provenance checks.
     let is_vintage_noise_masked =
         estimated_snr_db < 18.0 && (click_count >= 5 || stationary_noise_ratio >= 0.03);
 
-    // Note: on plucked strings, raw envelope decay (~0.35-0.45 s) is dominated by string decay
-    // when noise floor is very low and DRR is high; true diffuse room RT60 is much shorter in a
-    // padded room. Report honest effective room-tail estimate.
+    // On plucked strings, raw envelope decay (~0.35-0.55 s) is dominated by string decay
+    // when noise floor is very low, HF damping is steep, and DRR is high; true diffuse room RT60
+    // is much shorter in a padded/damped room.
     let effective_room_rt60_s = if is_vintage_noise_masked {
         estimated_rt60_s
-    } else if direct_to_reverberant_ratio_db >= 9.0 && hf_damping_ratio_db >= 14.0 {
-        // High DRR + strong HF absorption = damped/padded small room (acoustic RT60 ~0.12-0.22 s)
+    } else if direct_to_reverberant_ratio_db >= 8.5 && hf_damping_ratio_db >= 14.0 {
         Some(
             estimated_rt60_s
-                .map(|rt| (rt * 0.38).clamp(0.10, 0.24))
+                .map(|rt| (rt * 0.35).clamp(0.10, 0.24))
                 .unwrap_or(0.15),
         )
     } else {
@@ -1475,28 +1487,28 @@ fn extract_blind_signatures(
     let (inferred_room_type, inferred_material_class) = if is_vintage_noise_masked {
         (
             format!(
-                "Vintage acoustic-era room (est. RT60 ~{:.2} s, partially masked by archival surface noise)",
+                "Vintage acoustic-era room (signal-inferred est. RT60 ~{:.2} s, partially masked by archival surface noise; uncertain)",
                 estimated_rt60_s.unwrap_or(0.50)
             ),
-            "Reflective / untreated historical studio (masked by shellac surface noise)".into(),
+            "Reflective / untreated historical studio (masked by shellac surface noise; uncertain)".into(),
         )
     } else if direct_to_reverberant_ratio_db >= 8.5
         && hf_damping_ratio_db >= 14.0
         && effective_room_rt60_s.unwrap_or(0.15) <= 0.28
     {
         (
-            "Small padded / foam-treated room (~10×10×10 ft class)".into(),
-            "Padded / heavy porous acoustic absorption (wedge foam class)".into(),
+            "Small padded / foam-treated room (~10×10×10 ft class; signal-inferred, uncertain)".into(),
+            "Padded / heavy porous acoustic absorption (wedge foam class; signal-inferred, uncertain)".into(),
         )
-    } else if effective_room_rt60_s.unwrap_or(0.0) >= 0.45 {
+    } else if effective_room_rt60_s.unwrap_or(0.0) >= 0.45 && upper_band_phase_coherence < 0.22 {
         (
-            "Live reverberant room / hall".into(),
-            "Hard reflective walls (plaster/wood/stone class)".into(),
+            "Live reverberant room / hall (signal-inferred, uncertain)".into(),
+            "Hard reflective walls (plaster/wood/stone class; signal-inferred, uncertain)".into(),
         )
     } else {
         (
-            "Small-to-medium controlled studio room".into(),
-            "Light-to-moderate acoustic treatment".into(),
+            "Small-to-medium controlled studio room (signal-inferred, uncertain)".into(),
+            "Light-to-moderate acoustic treatment (signal-inferred, uncertain)".into(),
         )
     };
 
@@ -2709,17 +2721,36 @@ fn build_viewer_plots(
     let duration_s = max_len as f64 / f64::from(rate);
     let max_hz = (f64::from(rate) * 0.49).min(20_000.0);
 
+    // Zero-pad the shorter buffer strictly for aligned viewer plots so before/after waveforms,
+    // spectrograms, diff maps, and time ticks share the exact same `[0, duration_s]` axis
+    // when `after_samples` preserves an un-truncated Stage 4 room decay tail.
+    let before_aligned: std::borrow::Cow<'_, [f32]> = if before_samples.len() < max_len {
+        let mut padded = Vec::with_capacity(max_len);
+        padded.extend_from_slice(before_samples);
+        padded.resize(max_len, 0.0);
+        std::borrow::Cow::Owned(padded)
+    } else {
+        std::borrow::Cow::Borrowed(before_samples)
+    };
+    let after_aligned: std::borrow::Cow<'_, [f32]> = if after_samples.len() < max_len {
+        let mut padded = Vec::with_capacity(max_len);
+        padded.extend_from_slice(after_samples);
+        padded.resize(max_len, 0.0);
+        std::borrow::Cow::Owned(padded)
+    } else {
+        std::borrow::Cow::Borrowed(after_samples)
+    };
+
     let peak_b = before_samples.iter().fold(0.0_f32, |m, &v| m.max(v.abs()));
     let peak_a = after_samples.iter().fold(0.0_f32, |m, &v| m.max(v.abs()));
     let waveform_scale_linear = peak_b.max(peak_a).max(1e-4);
 
     let waveform_bins = 240_usize;
-    let waveform_before = downsample_waveform(before_samples, waveform_bins);
-    let waveform_after = downsample_waveform(after_samples, waveform_bins);
+    let waveform_before = downsample_waveform(&before_aligned, waveform_bins);
+    let waveform_after = downsample_waveform(&after_aligned, waveform_bins);
 
-    let common_len = before_samples.len().min(after_samples.len());
-    let residual: Vec<f32> = (0..common_len)
-        .map(|i| after_samples[i] - before_samples[i])
+    let residual: Vec<f32> = (0..max_len)
+        .map(|i| after_aligned[i] - before_aligned[i])
         .collect();
     let residual_waveform = downsample_waveform(&residual, waveform_bins);
 
@@ -2727,9 +2758,9 @@ fn build_viewer_plots(
     let rows = 64_usize;
     let db_floor = -96.0_f32;
     let (freq_hz, spec_before, times_s, coh_b, mod_b) =
-        compute_log_spectrogram_grid(before_samples, rate, cols, rows, 20.0, max_hz, db_floor);
+        compute_log_spectrogram_grid(&before_aligned, rate, cols, rows, 20.0, max_hz, db_floor);
     let (_, spec_after, _, coh_a, mod_a) =
-        compute_log_spectrogram_grid(after_samples, rate, cols, rows, 20.0, max_hz, db_floor);
+        compute_log_spectrogram_grid(&after_aligned, rate, cols, rows, 20.0, max_hz, db_floor);
     let spec_diff: Vec<f32> = spec_after
         .iter()
         .zip(&spec_before)
@@ -2977,6 +3008,39 @@ mod tests {
         assert_eq!(
             rep_plucked.dropout_count, 0,
             "Natural plucked-note decay into musical rests must not be misclassified as dropouts"
+        );
+    }
+
+    #[test]
+    fn viewer_plots_align_timelines_when_after_preserves_room_tail() {
+        let rate = 48_000_u32;
+        let before_n = rate as usize;
+        let tail_n = rate as usize / 4;
+        let before: Vec<f32> = (0..before_n)
+            .map(|i| (0.25 * (TAU * 440.0 * i as f64 / f64::from(rate)).sin()) as f32)
+            .collect();
+        let mut after = before.clone();
+        for j in 0..tail_n {
+            let env = (-(j as f64) / (0.06 * f64::from(rate))).exp();
+            after.push((0.15 * env * (TAU * 440.0 * j as f64 / f64::from(rate)).sin()) as f32);
+        }
+
+        let report =
+            build_technical_report(&before, &after, rate, "Tail alignment", "room tail").unwrap();
+        assert_eq!(report.before.samples, before_n);
+        assert_eq!(report.after.samples, before_n + tail_n);
+        assert!((report.plots.duration_s - 1.25).abs() < 1e-4);
+        let last_t = *report.plots.upper_band.times_s.last().unwrap();
+        assert!(
+            f64::from(last_t) > 1.20 && f64::from(last_t) <= 1.25,
+            "times_s must span the full tail-preserved timeline, got last_t={last_t}"
+        );
+        // Zero-padded tail region in before waveform is silent while after waveform shows tail
+        let tail_bin = report.plots.waveform_bins - 10;
+        assert_eq!(report.plots.waveform_before[tail_bin], [0.0, 0.0]);
+        assert!(
+            report.plots.waveform_after[tail_bin][1] - report.plots.waveform_after[tail_bin][0]
+                > 1e-4
         );
     }
 }
